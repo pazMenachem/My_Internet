@@ -1,0 +1,8 @@
+-e git+https://github.com/pazMenachem/My_Internet.git@94c2d2bea3c2ad912444fd3cba2ea4a4e9bf6daf#egg=client&subdirectory=client
+colorama==0.4.6
+exceptiongroup==1.2.2
+iniconfig==2.0.0
+packaging==24.1
+pluggy==1.5.0
+pytest==8.3.3
+tomli==2.0.2
