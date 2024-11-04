@@ -1,51 +1,93 @@
-import logging
-import os
-from datetime import datetime
-from typing import Optional
-
+import json
+import threading
 from .Communicator import Communicator
 from .View import Viewer
-
-LOG_DIR = "client_logs"
+from .Logger import setup_logger
 
 class Application:
+    """
+    Main application class that coordinates communication between UI and server.
+    
+    Uses threading to handle simultaneous GUI and network operations.
+    
+    Attributes:
+        _logger: Logger instance for application logging
+        _view: Viewer instance for GUI operations
+        _communicator: Communicator instance for network operations
+    """
+    
     def __init__(self) -> None:
-        self._view: Viewer = Viewer()
-        self._communicator: Communicator = Communicator()
-        self._logger: Optional[logging.Logger] = None
-
-        self._logger_setup()
+        """Initialize application components."""
+        self._logger = setup_logger(__name__)
+        self._view = Viewer(message_callback=self._handle_request)
+        self._communicator = Communicator(message_callback=self._handle_request)
 
     def run(self) -> None:
+        """
+        Start the application with threaded communication handling.
+        
+        Raises:
+            Exception: If there's an error during startup of either component.
+        """
         self._logger.info("Starting application")
         
         try:
-            self._view.run()
-            self._communicator.run()
-
+            self._start_communication()
+            self._start_gui()
+            
         except Exception as e:
             self._logger.error(f"Error during execution: {str(e)}", exc_info=True)
             raise
-    
-    def send_message(self, message: str) -> None:
-        self._communicator.send_message(message)
+        finally:
+            self._cleanup()
 
-    def _logger_setup(self) -> None:
-        if not os.path.exists(LOG_DIR):
-            os.makedirs(LOG_DIR)
+    def _start_communication(self) -> None:
+        """Initialize and start the communication thread."""
+        try:
+            self._communicator.connect()
+            threading.Thread(
+                target=self._communicator.receive_message,
+                daemon=True
+            ).start()
+            
+            self._logger.info("Communication server started successfully")
+        except Exception as e:
+            self._logger.error(f"Failed to start communication: {str(e)}")
+            raise
 
-        log_file: str = os.path.join(
-            LOG_DIR, f"Client_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
-        )
+    def _start_gui(self) -> None:
+        """Start the GUI main loop."""
+        try:
+            self._logger.info("Starting GUI")
+            self._view.run()
+            
+        except Exception as e:
+            self._logger.error(f"Failed to start GUI: {str(e)}")
+            raise
+
+    def _handle_request(self, request: str) -> None:
+        """
+        Handle outgoing messages from the UI and Server.
         
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-            handlers=[
-                logging.FileHandler(log_file),
-                logging.StreamHandler(),
-            ],
-        )
+        Args:
+            request: received request from server or user input from UI.
+        """
+        try:
+            self._logger.debug(f"Processing request: {request}")
+            
+            pass ## TODO: Implement request handling from server or UI.
+            
+        except json.JSONDecodeError as e:
+            self._logger.error(f"Invalid JSON format: {str(e)}")
+            raise
+        except Exception as e:
+            self._logger.error(f"Error handling request: {str(e)}")
+            raise
 
-        self._logger = logging.getLogger(__name__)
-        self._logger.info("Logger setup complete") 
+    def _cleanup(self) -> None:
+        """Clean up resources and stop threads."""
+        self._logger.info("Cleaning up application resources")
+        if self._communicator:
+            self._communicator.close()
+        if self._view:
+            self._view.root.destroy()

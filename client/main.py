@@ -1,7 +1,8 @@
-from src.Controller import Controller
+from src.Application import Application
 
-def main():
-    Controller().run()
+def main() -> None:
+    application: Application = Application()
+    application.run()
 
 if __name__ == "__main__":
     main()
