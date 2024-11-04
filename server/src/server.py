@@ -5,14 +5,14 @@ import json
 from typing import Dict, Any
 from My_Internet.server.src.config import HOST, CLIENT_PORT, KERNEL_PORT, DB_FILE
 from My_Internet.server.src.db_manager import DatabaseManager
-from My_Internet.server.src.handlers import AdBlockHandler, DomainBlockHandler, AdultContentBlockHandler
-from response_codes import INVALID_REQUEST, RESPONSE_MESSAGES
+from My_Internet.server.src.handlers import RequestFactory
+
 
 
 async def handle_client(
     reader: asyncio.StreamReader, 
     writer: asyncio.StreamWriter, 
-    db_manager: DatabaseManager
+    request_factory: RequestFactory
 ) -> None:
     while True:
         try:
@@ -21,7 +21,7 @@ async def handle_client(
                 break
 
             request_data = json.loads(data.decode('utf-8'))
-            response_data = route_request(request_data, db_manager)
+            response_data = request_factory.handle_request(request_data)
 
             writer.write(json.dumps(response_data).encode('utf-8') + b'\n')
             await writer.drain()
@@ -56,24 +56,6 @@ async def handle_kernel(
 
     writer.close()
 
-# create request factory class , and make an instance of it to handle the request base on the data send it to the right handler.
-def route_request(request_data: Dict[str, Any], db_manager: DatabaseManager) -> Dict[str, Any]:
-    request_type = request_data.get('type')
-
-    if request_type == 'ad_block':
-        handler = AdBlockHandler(db_manager)
-    elif request_type == 'domain_block':
-        handler = DomainBlockHandler(db_manager)
-    elif request_type == 'adult_content_block':
-        handler = AdultContentBlockHandler()
-    else:
-        return {
-            'code': INVALID_REQUEST,
-            'message': RESPONSE_MESSAGES[INVALID_REQUEST]
-        }
-
-    return handler.handle_request(request_data)
-
 
 def route_kernel_request(request_data: Dict[str, Any], db_manager: DatabaseManager) -> Dict[str, Any]:
     domain = request_data.get('domain')
@@ -85,8 +67,10 @@ def route_kernel_request(request_data: Dict[str, Any], db_manager: DatabaseManag
 
 
 async def start_server(db_manager: DatabaseManager) -> None:
+    request_factory = RequestFactory(db_manager)
+    
     client_server = await asyncio.start_server(
-        lambda r, w: handle_client(r, w, db_manager), 
+        lambda r, w: handle_client(r, w, request_factory), 
         HOST, 
         CLIENT_PORT
     )
