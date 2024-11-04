@@ -5,7 +5,7 @@ import json
 from typing import Dict, Any
 from My_Internet.server.src.config import HOST, CLIENT_PORT, KERNEL_PORT, DB_FILE
 from My_Internet.server.src.db_manager import DatabaseManager
-from My_Internet.server.src.handlers import RequestFactory
+from My_Internet.server.src.handlers import RequestFactory, AdultContentBlockHandler
 
 
 
@@ -59,11 +59,16 @@ async def handle_kernel(
 
 def route_kernel_request(request_data: Dict[str, Any], db_manager: DatabaseManager) -> Dict[str, Any]:
     domain = request_data.get('domain')
+    categories = request_data.get('categories', [])
 
-    if db_manager.is_domain_blocked(domain) or db_manager.is_easylist_blocked(domain):
-        return {'block': True}
-    else:
-        return {'block': False}
+    # Fast checks in order of most common to least common
+    should_block = (
+        db_manager.is_domain_blocked(domain) or 
+        db_manager.is_easylist_blocked(domain) or
+        (AdultContentBlockHandler.is_blocking_enabled() and 'adult' in categories)
+    )
+
+    return {'block': should_block}
 
 
 async def start_server(db_manager: DatabaseManager) -> None:

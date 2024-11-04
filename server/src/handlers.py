@@ -16,7 +16,6 @@ class RequestHandler(ABC):
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         pass
 
-FAMILY_DNS_IP = "1.1.1.3"
 EASYLIST_URL = "https://easylist.to/easylist/easylist.txt"
 
 
@@ -94,25 +93,83 @@ class DomainBlockHandler(RequestHandler):
 
 
 class AdultContentBlockHandler(RequestHandler):
+    # Class-level variable to track status across all instances
+    # We use a class variable so all instances share the same state
+    _is_enabled: bool = False
+    
+    def __init__(self, db_manager: DatabaseManager):
+        self.db_manager = db_manager
+
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        domain = request_data.get('domain')
-        if self.is_adult_content(domain):
+        action = request_data.get('action')
+        
+        try:
+            if action == 'status':
+                return self._get_status()
+                
+            elif action in ['enable', 'disable']:
+                return self._toggle_blocking(action)
+                
+            elif action == 'check':
+                return self._check_domain(request_data.get('domain'))
+            
+            else:
+                return {
+                    'code': INVALID_REQUEST,
+                    'message': RESPONSE_MESSAGES[INVALID_REQUEST]
+                }
+                
+        except Exception as e:
+            print(f"Error in adult content handler: {e}")
+            return {
+                'code': INVALID_REQUEST,
+                'message': "An error occurred processing the request"
+            }
+
+    def _get_status(self) -> Dict[str, Any]:
+        """Get current blocking status."""
+        return {
+            'code': SUCCESS,
+            'message': RESPONSE_MESSAGES[SUCCESS],
+            'adult_content_block': 'on' if self._is_enabled else 'off'
+        }
+
+    def _toggle_blocking(self, action: str) -> Dict[str, Any]:
+        """Enable or disable blocking."""
+        self.__class__._is_enabled = (action == 'enable')
+        status = 'enabled' if self._is_enabled else 'disabled'
+        
+        print(f"Adult content blocking {status}") 
+        
+        return {
+            'code': SUCCESS,
+            'message': f"Adult content blocking has been {status}.",
+            'adult_content_block': 'on' if self._is_enabled else 'off'
+        }
+
+    def _check_domain(self, domain: str) -> Dict[str, Any]:
+        """Check if a domain should be blocked."""
+        if not domain:
+            return {
+                'code': INVALID_REQUEST,
+                'message': RESPONSE_MESSAGES[INVALID_REQUEST]
+            }
+            
+        if self._is_enabled:
             return {
                 'code': ADULT_CONTENT_BLOCKED,
                 'message': RESPONSE_MESSAGES[ADULT_CONTENT_BLOCKED]
             }
-        else:
-            return {
-                'code': SUCCESS,
-                'message': RESPONSE_MESSAGES[SUCCESS]
-            }
+        
+        return {
+            'code': SUCCESS,
+            'message': RESPONSE_MESSAGES[SUCCESS]
+        }
 
-    def is_adult_content(self, domain: str) -> bool:
-        try:
-            ip_address = socket.gethostbyname(domain)
-            return ip_address == FAMILY_DNS_IP
-        except socket.gaierror:
-            return False
+    @classmethod
+    def is_blocking_enabled(cls) -> bool:
+        """Public method to check if blocking is enabled."""
+        return cls._is_enabled
 
 
 class RequestFactory:
