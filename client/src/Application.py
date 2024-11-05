@@ -21,6 +21,8 @@ class Application:
         """Initialize application components."""
         self._logger = setup_logger(__name__)
         self._config_manager = ConfigManager()
+        self._request_lock = threading.Lock()
+        
         self._view = Viewer(config_manager=self._config_manager, message_callback=self._handle_request)
         self._communicator = Communicator(config_manager=self._config_manager, message_callback=self._handle_request)
 
@@ -77,8 +79,16 @@ class Application:
         try:
             self._logger.info(f"Processing request: {request}")
             
-            pass ## TODO: Implement request handling from server or UI.
-            
+            with self._request_lock:
+                match request["CODE"]:
+                    case "50" | "51" | "52":
+                        self._communicator.send_message(request)
+                    case "53":
+                        if not isinstance(request["content"], list):
+                            self._logger.error("Invalid content format for domain list update")
+                            return
+                        self._view.update_domain_list(request["content"])
+
         except json.JSONDecodeError as e:
             self._logger.error(f"Invalid JSON format: {str(e)}")
             raise

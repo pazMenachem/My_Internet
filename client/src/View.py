@@ -33,6 +33,51 @@ class Viewer:
         self._setup_ui()
         self.logger.info("Viewer initialization complete")
 
+    def run(self) -> None:
+        """Start the main event loop of the viewer."""
+        self.logger.info("Starting main event loop")
+        self.root.mainloop()
+
+    def get_blocked_domains(self) -> tuple[str, ...]:
+        """
+        Get the list of currently blocked domains.
+        
+        Returns:
+            A tuple containing all blocked domains.
+        """
+        return self.domains_listbox.get(0, tk.END)
+
+    def get_block_settings(self) -> dict[str, str]:
+        """
+        Get the current state of blocking settings.
+        
+        Returns:
+            A dictionary containing the current state of ad and adult content blocking.
+        """
+        return {
+            "ad_block": self.ad_var.get(),
+            "adult_block": self.adult_var.get()
+        }
+
+    def update_domain_list(self, domains: List[str]) -> None:
+        """
+        Update the domains listbox with a new list of domains from the server.
+
+        Args:
+            domains: List of domain strings to be displayed in the listbox.
+        """
+        self.logger.info("Updating domain list from server")
+        try:
+            self.domains_listbox.delete(0, tk.END)
+            
+            for domain in domains:
+                self.domains_listbox.insert(tk.END, domain)
+                
+            self.logger.info(f"Updated domain list with {len(domains)} domains")
+        except Exception as e:
+            self.logger.error(f"Error updating domain list: {str(e)}")
+            self._show_error("Failed to update domain list")
+
     def _send_message(self) -> None:
         """Handle the sending of messages from the input field."""
         message = self.input_field.get().strip()
@@ -42,10 +87,64 @@ class Viewer:
             self.input_field.delete(0, tk.END)
             self.display_message("You", message)
 
-    def run(self) -> None:
-        """Start the main event loop of the viewer."""
-        self.logger.info("Starting main event loop")
-        self.root.mainloop()
+    def _add_domain(self) -> None:
+        """Add a domain to the blocked sites list."""
+        domain = self.domain_entry.get().strip()
+        if domain:
+            if domain not in self.config["blocked_domains"]:
+                self.domains_listbox.insert(tk.END, domain)
+                self.config["blocked_domains"][domain] = True
+                self.domain_entry.delete(0, tk.END)
+                self.config_manager.save_config(self.config)
+                self.logger.info(f"Domain added: {domain}")
+                
+                self._message_callback(json.dumps({"CODE": "53", "content": domain}))
+            else:
+                self.logger.warning(f"Attempted to add duplicate domain: {domain}")
+                self._show_error("Domain already exists in the list")
+                
+    def _remove_domain(self) -> None:
+        """Remove the selected domain from the blocked sites list."""
+        selection = self.domains_listbox.curselection()
+        if selection:
+            domain = self.domains_listbox.get(selection)
+            self.domains_listbox.delete(selection)
+            del self.config["blocked_domains"][domain]
+            self.config_manager.save_config(self.config)
+            self.logger.info(f"Domain removed: {domain}")
+            
+            self._message_callback(json.dumps({"CODE": "54", "content": domain}))
+        else:
+            self.logger.warning("Attempted to remove domain without selection")
+            self._show_error("Please select a domain to remove")
+
+    def _handle_ad_block(self) -> None:
+        """Handle changes to the ad block setting."""
+        state = self.ad_var.get()
+        self.config["settings"]["ad_block"] = state
+        self.config_manager.save_config(self.config)
+        self.logger.info(f"Ad blocking state changed to: {state}")
+        
+        self._message_callback(json.dumps({"CODE": "50", "content": state}))
+
+    def _handle_adult_block(self) -> None:
+        """Handle changes to the adult sites block setting."""
+        state = self.adult_var.get()
+        self.config["settings"]["adult_block"] = state
+        self.config_manager.save_config(self.config)
+        self.logger.info(f"Adult site blocking state changed to: {state}")
+        
+        self._message_callback(json.dumps({"CODE": "51", "content": state}))
+
+    def _show_error(self, message: str) -> None:
+        """
+        Display an error message in a popup window.
+        
+        Args:
+            message: The error message to display.
+        """
+        self.logger.error(f"Error message displayed: {message}")
+        tk.messagebox.showerror("Error", message)
 
     def _setup_ui(self) -> None:
         """Set up the UI components including block controls and domain list."""
@@ -108,75 +207,3 @@ class Viewer:
         main_container.columnconfigure(0, weight=1)
         sites_frame.columnconfigure(0, weight=1)
         domain_entry_frame.columnconfigure(1, weight=1)
-
-    def _add_domain(self) -> None:
-        """Add a domain to the blocked sites list."""
-        domain = self.domain_entry.get().strip()
-        if domain:
-            if domain not in self.config["blocked_domains"]:
-                self.domains_listbox.insert(tk.END, domain)
-                self.config["blocked_domains"][domain] = True
-                self.domain_entry.delete(0, tk.END)
-                self.config_manager.save_config(self.config)
-                self.logger.info(f"Domain added: {domain}")
-            else:
-                self.logger.warning(f"Attempted to add duplicate domain: {domain}")
-                self._show_error("Domain already exists in the list")
-
-    def _remove_domain(self) -> None:
-        """Remove the selected domain from the blocked sites list."""
-        selection = self.domains_listbox.curselection()
-        if selection:
-            domain = self.domains_listbox.get(selection)
-            self.domains_listbox.delete(selection)
-            del self.config["blocked_domains"][domain]
-            self.config_manager.save_config(self.config)
-            self.logger.info(f"Domain removed: {domain}")
-        else:
-            self.logger.warning("Attempted to remove domain without selection")
-            self._show_error("Please select a domain to remove")
-
-    def _handle_ad_block(self) -> None:
-        """Handle changes to the ad block setting."""
-        state = self.ad_var.get()
-        self.config["settings"]["ad_block"] = state
-        self.config_manager.save_config(self.config)
-        self.logger.info(f"Ad blocking state changed to: {state}")
-
-    def _handle_adult_block(self) -> None:
-        """Handle changes to the adult sites block setting."""
-        state = self.adult_var.get()
-        self.config["settings"]["adult_block"] = state
-        self.config_manager.save_config(self.config)
-        self.logger.info(f"Adult site blocking state changed to: {state}")
-
-    def _show_error(self, message: str) -> None:
-        """
-        Display an error message in a popup window.
-        
-        Args:
-            message: The error message to display.
-        """
-        self.logger.error(f"Error message displayed: {message}")
-        tk.messagebox.showerror("Error", message)
-
-    def get_blocked_domains(self) -> tuple[str, ...]:
-        """
-        Get the list of currently blocked domains.
-        
-        Returns:
-            A tuple containing all blocked domains.
-        """
-        return self.domains_listbox.get(0, tk.END)
-
-    def get_block_settings(self) -> dict[str, str]:
-        """
-        Get the current state of blocking settings.
-        
-        Returns:
-            A dictionary containing the current state of ad and adult content blocking.
-        """
-        return {
-            "ad_block": self.ad_var.get(),
-            "adult_block": self.adult_var.get()
-        }
