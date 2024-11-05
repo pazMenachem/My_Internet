@@ -4,7 +4,7 @@ import socket
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from My_Internet.server.src.db_manager import DatabaseManager
-from response_codes import (
+from My_Internet.server.src.response_codes import (
     SUCCESS, INVALID_REQUEST, DOMAIN_BLOCKED,
     DOMAIN_NOT_FOUND, AD_BLOCK_ENABLED,
     ADULT_CONTENT_BLOCKED, RESPONSE_MESSAGES
@@ -185,7 +185,7 @@ class RequestFactory:
         self._handlers = {
             'ad_block': lambda: AdBlockHandler(self.db_manager),
             'domain_block': lambda: DomainBlockHandler(self.db_manager),
-            'adult_content_block': lambda: AdultContentBlockHandler()
+            'adult_content_block': lambda: AdultContentBlockHandler(self.db_manager)
         }
     
     def create_request_handler(self, request_type: str) -> Optional[RequestHandler]:
