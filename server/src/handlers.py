@@ -3,8 +3,8 @@ import requests
 import socket
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
-from My_Internet.server.src.db_manager import DatabaseManager
-from My_Internet.server.src.response_codes import (
+from .db_manager import DatabaseManager
+from .response_codes import (
     SUCCESS, INVALID_REQUEST, DOMAIN_BLOCKED,
     DOMAIN_NOT_FOUND, AD_BLOCK_ENABLED,
     ADULT_CONTENT_BLOCKED, RESPONSE_MESSAGES

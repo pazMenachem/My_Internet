@@ -3,9 +3,9 @@
 import asyncio
 import json
 from typing import Dict, Any
-from My_Internet.server.src.config import HOST, CLIENT_PORT, KERNEL_PORT, DB_FILE
-from My_Internet.server.src.db_manager import DatabaseManager
-from My_Internet.server.src.handlers import RequestFactory, AdultContentBlockHandler
+from .config import HOST, CLIENT_PORT, KERNEL_PORT, DB_FILE
+from .db_manager import DatabaseManager
+from .handlers import RequestFactory, AdultContentBlockHandler
 
 
 
