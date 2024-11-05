@@ -1,25 +1,37 @@
 import tkinter as tk
-from tkinter import scrolledtext, ttk
-from typing import Callable
+from tkinter import scrolledtext, ttk, messagebox
+from typing import Callable, Dict, List, Any
 import json
+import os
+from .Logger import setup_logger
+from .ConfigManager import ConfigManager
+
 
 class Viewer:
     """
     Graphical user interface for the application.
     """
 
-    def __init__(self, message_callback: Callable[[str], None]) -> None:
+    def __init__(self, config_manager: ConfigManager, message_callback: Callable[[str], None]) -> None:
         """
         Initialize the viewer window and its components.
         
         Args:
+            config_manager: Configuration manager instance
             message_callback: Callback function to handle message sending.
         """
-        self.root: tk.Tk = tk.Tk()
-        self.root.title("Chat Application")
-        self.root.geometry("800x600")
+        self.logger = setup_logger(__name__)
+        self.logger.info("Initializing Viewer")
+        self.config_manager = config_manager
+        self.config = config_manager.get_config()
         self._message_callback = message_callback
+        
+        self.root: tk.Tk = tk.Tk()
+        self.root.title("Site Blocker")
+        self.root.geometry("800x600")
+        
         self._setup_ui()
+        self.logger.info("Viewer initialization complete")
 
     def _send_message(self) -> None:
         """Handle the sending of messages from the input field."""
@@ -32,63 +44,139 @@ class Viewer:
 
     def run(self) -> None:
         """Start the main event loop of the viewer."""
+        self.logger.info("Starting main event loop")
         self.root.mainloop()
 
     def _setup_ui(self) -> None:
-        """Set up the UI components including text areas and buttons."""
-        main_container = ttk.Frame(self.root, padding="5")
+        """Set up the UI components including block controls and domain list."""
+        main_container = ttk.Frame(self.root, padding="10")
         main_container.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
 
-        self.message_area = scrolledtext.ScrolledText(
-            main_container,
-            wrap=tk.WORD,
-            width=70,
-            height=30
-        )
+        # Left side - Specific sites block
+        sites_frame = ttk.LabelFrame(main_container, text="Specific sites block", padding="5")
+        sites_frame.grid(row=0, column=0, rowspan=3, padx=5, sticky=(tk.W, tk.E, tk.N, tk.S))
         
-        self.message_area.grid(row=0, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S))
-        self.message_area.config(state=tk.DISABLED)
+        # Domains listbox
+        self.domains_listbox = tk.Listbox(sites_frame, width=40, height=15)
+        self.domains_listbox.grid(row=0, column=0, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
+        
+        # Add domain entry
+        domain_entry_frame = ttk.Frame(sites_frame)
+        domain_entry_frame.grid(row=1, column=0, sticky=(tk.W, tk.E))
+        
+        ttk.Label(domain_entry_frame, text="Add Domain:").grid(row=0, column=0, padx=5)
+        self.domain_entry = ttk.Entry(domain_entry_frame)
+        self.domain_entry.grid(row=0, column=1, padx=5, sticky=(tk.W, tk.E))
+        
+        # Add buttons for domain management
+        button_frame = ttk.Frame(sites_frame)
+        button_frame.grid(row=2, column=0, pady=5, sticky=(tk.W, tk.E))
+        
+        ttk.Button(button_frame, text="Add", command=self._add_domain).grid(row=0, column=0, padx=5)
+        ttk.Button(button_frame, text="Remove", command=self._remove_domain).grid(row=0, column=1, padx=5)
+        
+        # Bind double-click event for removing domains
+        self.domains_listbox.bind('<Double-Button-1>', lambda e: self._remove_domain())
+        
+        # Load saved domains into listbox
+        for domain in self.config["blocked_domains"].keys():
+            self.domains_listbox.insert(tk.END, domain)
+        
+        # Ad Block controls
+        ad_frame = ttk.LabelFrame(main_container, text="Ad Block", padding="5")
+        ad_frame.grid(row=0, column=1, pady=10, sticky=(tk.W, tk.E))
+        
+        self.ad_var = tk.StringVar(value=self.config["settings"]["ad_block"])
+        ttk.Radiobutton(ad_frame, text="on", value="on", variable=self.ad_var).grid(row=0, column=0, padx=10)
+        ttk.Radiobutton(ad_frame, text="off", value="off", variable=self.ad_var).grid(row=0, column=1, padx=10)
+        
+        # Adult sites Block controls
+        adult_frame = ttk.LabelFrame(main_container, text="Adult sites Block", padding="5")
+        adult_frame.grid(row=1, column=1, pady=10, sticky=(tk.W, tk.E))
+        
+        self.adult_var = tk.StringVar(value=self.config["settings"]["adult_block"])
+        ttk.Radiobutton(adult_frame, text="on", value="on", variable=self.adult_var).grid(row=0, column=0, padx=10)
+        ttk.Radiobutton(adult_frame, text="off", value="off", variable=self.adult_var).grid(row=0, column=1, padx=10)
+        
+        # Bind radio button commands
+        self.ad_var.trace_add('write', lambda *args: self._handle_ad_block())
+        self.adult_var.trace_add('write', lambda *args: self._handle_adult_block())
+        
+        # Configure grid weights
+        main_container.columnconfigure(0, weight=1)
+        sites_frame.columnconfigure(0, weight=1)
+        domain_entry_frame.columnconfigure(1, weight=1)
 
-        self.input_field = ttk.Entry(main_container)
-        self.input_field.grid(row=1, column=0, sticky=(tk.W, tk.E))
-        self.input_field.bind("<Return>", lambda e: self._send_message())
+    def _add_domain(self) -> None:
+        """Add a domain to the blocked sites list."""
+        domain = self.domain_entry.get().strip()
+        if domain:
+            if domain not in self.config["blocked_domains"]:
+                self.domains_listbox.insert(tk.END, domain)
+                self.config["blocked_domains"][domain] = True
+                self.domain_entry.delete(0, tk.END)
+                self.config_manager.save_config(self.config)
+                self.logger.info(f"Domain added: {domain}")
+            else:
+                self.logger.warning(f"Attempted to add duplicate domain: {domain}")
+                self._show_error("Domain already exists in the list")
 
-        self.send_button = ttk.Button(
-            main_container,
-            text="Send",
-            command=self._send_message
-        )
-        self.send_button.grid(row=1, column=1)
+    def _remove_domain(self) -> None:
+        """Remove the selected domain from the blocked sites list."""
+        selection = self.domains_listbox.curselection()
+        if selection:
+            domain = self.domains_listbox.get(selection)
+            self.domains_listbox.delete(selection)
+            del self.config["blocked_domains"][domain]
+            self.config_manager.save_config(self.config)
+            self.logger.info(f"Domain removed: {domain}")
+        else:
+            self.logger.warning("Attempted to remove domain without selection")
+            self._show_error("Please select a domain to remove")
 
-        main_container.columnconfigure(0, weight=3)
-        main_container.columnconfigure(1, weight=1)
-        main_container.rowconfigure(0, weight=1)
+    def _handle_ad_block(self) -> None:
+        """Handle changes to the ad block setting."""
+        state = self.ad_var.get()
+        self.config["settings"]["ad_block"] = state
+        self.config_manager.save_config(self.config)
+        self.logger.info(f"Ad blocking state changed to: {state}")
 
-    ## TODO: This method won't be relevant for the final version
-    def display_message(self, sender: str, message: str) -> None:
+    def _handle_adult_block(self) -> None:
+        """Handle changes to the adult sites block setting."""
+        state = self.adult_var.get()
+        self.config["settings"]["adult_block"] = state
+        self.config_manager.save_config(self.config)
+        self.logger.info(f"Adult site blocking state changed to: {state}")
+
+    def _show_error(self, message: str) -> None:
         """
-        Display a message in the message area.
+        Display an error message in a popup window.
         
         Args:
-            sender: The name of the message sender.
-            message: The message content to display.
+            message: The error message to display.
         """
-        self.message_area.config(state=tk.NORMAL)
-        self.message_area.insert(tk.END, f"{sender}: {message}\n")
-        self.message_area.see(tk.END)
-        self.message_area.config(state=tk.DISABLED)
+        self.logger.error(f"Error message displayed: {message}")
+        tk.messagebox.showerror("Error", message)
 
-    ## TODO: This method won't be relevant for the final version
-    def display_error(self, error_message: str) -> None:
+    def get_blocked_domains(self) -> tuple[str, ...]:
         """
-        Display an error message in the message area.
+        Get the list of currently blocked domains.
         
-        Args:
-            error_message: The error message to display.
+        Returns:
+            A tuple containing all blocked domains.
         """
-        self.message_area.config(state=tk.NORMAL)
-        self.message_area.insert(tk.END, f"Error: {error_message}\n")
-        self.message_area.see(tk.END)
-        self.message_area.config(state=tk.DISABLED)
+        return self.domains_listbox.get(0, tk.END)
+
+    def get_block_settings(self) -> dict[str, str]:
+        """
+        Get the current state of blocking settings.
+        
+        Returns:
+            A dictionary containing the current state of ad and adult content blocking.
+        """
+        return {
+            "ad_block": self.ad_var.get(),
+            "adult_block": self.adult_var.get()
+        }

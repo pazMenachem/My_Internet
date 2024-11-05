@@ -3,6 +3,7 @@ import threading
 from .Communicator import Communicator
 from .View import Viewer
 from .Logger import setup_logger
+from .ConfigManager import ConfigManager
 
 class Application:
     """
@@ -19,8 +20,9 @@ class Application:
     def __init__(self) -> None:
         """Initialize application components."""
         self._logger = setup_logger(__name__)
-        self._view = Viewer(message_callback=self._handle_request)
-        self._communicator = Communicator(message_callback=self._handle_request)
+        self._config_manager = ConfigManager()
+        self._view = Viewer(config_manager=self._config_manager, message_callback=self._handle_request)
+        self._communicator = Communicator(config_manager=self._config_manager, message_callback=self._handle_request)
 
     def run(self) -> None:
         """
@@ -32,7 +34,7 @@ class Application:
         self._logger.info("Starting application")
         
         try:
-            self._start_communication()
+            # self._start_communication()
             self._start_gui()
             
         except Exception as e:
@@ -73,7 +75,7 @@ class Application:
             request: received request from server or user input from UI.
         """
         try:
-            self._logger.debug(f"Processing request: {request}")
+            self._logger.info(f"Processing request: {request}")
             
             pass ## TODO: Implement request handling from server or UI.
             
@@ -87,7 +89,12 @@ class Application:
     def _cleanup(self) -> None:
         """Clean up resources and stop threads."""
         self._logger.info("Cleaning up application resources")
-        if self._communicator:
-            self._communicator.close()
-        if self._view:
-            self._view.root.destroy()
+        try:
+            if self._communicator:
+                self._communicator.close()
+                
+            if self._view and self._view.root.winfo_exists():
+                self._view.root.destroy()
+                
+        except Exception as e:
+            self._logger.warning(f"Cleanup encountered an error: {str(e)}")

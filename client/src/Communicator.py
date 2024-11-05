@@ -1,23 +1,26 @@
 import socket
 from typing import Optional, Callable
 import json
-
-PORT = 65432
-HOST = '127.0.0.1'
-RECEIVE_BUFFER_SIZE = 1024
+from .Logger import setup_logger
 
 class Communicator:
-    def __init__(self, message_callback: Callable[[str], None]) -> None:
+    def __init__(self, config_manager, message_callback: Callable[[str], None]) -> None:
         """
         Initialize the communicator.
         
         Args:
+            config_manager: Configuration manager instance
             message_callback: Callback function to handle received messages.
         """
-        self._host = HOST
-        self._port = PORT
-        self._socket: Optional[socket.socket] = None
+        self.logger = setup_logger(__name__)
+        self.logger.info("Initializing Communicator")
+        self.config = config_manager.get_config()
         self._message_callback = message_callback
+        
+        self._host = self.config["network"]["host"]
+        self._port = self.config["network"]["port"]
+        self._receive_buffer_size = self.config["network"]["receive_buffer_size"]
+        self._socket: Optional[socket.socket] = None
 
     def connect(self) -> None:
         """
@@ -26,8 +29,13 @@ class Communicator:
         Raises:
             socket.error: If connection cannot be established.
         """
-        self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self._socket.connect((self._host, self._port))
+        try:
+            self._socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._socket.connect((self._host, self._port))
+            self.logger.info(f"Connected to server at {self._host}:{self._port}")
+        except socket.error as e:
+            self.logger.error(f"Failed to connect to server: {str(e)}")
+            raise
 
     def send_message(self, message: str) -> None:
         """
@@ -40,9 +48,15 @@ class Communicator:
             RuntimeError: If socket connection is not established.
         """
         if not self._socket:
+            self.logger.error("Attempted to send message without connection")
             raise RuntimeError("Socket not set up. Call connect method first.")
 
-        self._socket.send(message.encode('utf-8'))
+        try:
+            self._socket.send(message.encode('utf-8'))
+            self.logger.info(f"Message sent: {message}")
+        except Exception as e:
+            self.logger.error(f"Failed to send message: {str(e)}")
+            raise
 
     def receive_message(self) -> None:
         """Continuously receive and process messages from the socket connection.
@@ -56,15 +70,29 @@ class Communicator:
             UnicodeDecodeError: If received data cannot be decoded as UTF-8.
         """
         if not self._socket:
+            self.logger.error("Attempted to receive message without connection")
             raise RuntimeError("Socket not set up. Call connect method first.")
 
-        while message_bytes := self._socket.recv(RECEIVE_BUFFER_SIZE):
-            if not message_bytes:
-                break
-            self._message_callback(message_bytes.decode('utf-8'))
+        self.logger.info("Starting message receive loop")
+        try:
+            while message_bytes := self._socket.recv(self._receive_buffer_size):
+                if not message_bytes:
+                    self.logger.warning("Received empty message, breaking receive loop")
+                    break
+                message = message_bytes.decode('utf-8')
+                self.logger.info(f"Received message: {message}")
+                self._message_callback(message)
+        except Exception as e:
+            self.logger.error(f"Error receiving message: {str(e)}")
+            raise
 
     def close(self) -> None:
         """Close the socket connection and clean up resources."""
         if self._socket:
-            self._socket.close()
-        self._socket = None
+            try:
+                self._socket.close()
+                self.logger.info("Socket connection closed")
+            except Exception as e:
+                self.logger.error(f"Error closing socket: {str(e)}")
+            finally:
+                self._socket = None
