@@ -60,3 +60,17 @@ def sample_requests() -> dict:
             "domain": "test.com"
         }
     }
+
+@pytest.fixture
+async def mock_stream_reader() -> mock.AsyncMock:
+    """Global fixture for AsyncMock StreamReader."""
+    reader = mock.AsyncMock()
+    return reader
+
+@pytest.fixture
+async def mock_stream_writer() -> mock.AsyncMock:
+    """Global fixture for AsyncMock StreamWriter."""
+    writer = mock.AsyncMock()
+    writer.write = mock.Mock()  # write is usually synchronous
+    writer.drain = mock.AsyncMock()
+    return writer
