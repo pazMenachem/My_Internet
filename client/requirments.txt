@@ -1,4 +1,4 @@
--e git+https://github.com/pazMenachem/My_Internet.git@94c2d2bea3c2ad912444fd3cba2ea4a4e9bf6daf#egg=client&subdirectory=client
+-e git+https://github.com/pazMenachem/My_Internet.git@b0c04b626f09baa0dace19fb70902cc8189f7ce0#egg=client&subdirectory=client
 colorama==0.4.6
 exceptiongroup==1.2.2
 iniconfig==2.0.0
