@@ -1,30 +1,36 @@
-import os
 import logging
 from unittest import mock
-from datetime import datetime
 from typing import Optional, Callable
+import json
 
 import pytest
 
 from src.Application import Application
 from src.View import Viewer
 from src.Communicator import Communicator
+from src.utils import (
+    STR_CODE, STR_CONTENT,
+    Codes, DEFAULT_CONFIG
+)
 
 
 @pytest.fixture
-def mock_callback() -> Callable[[str], None]:
-    """Fixture to provide a mock callback function."""
-    return mock.Mock()
+def mock_config_manager() -> mock.Mock:
+    """Fixture to provide a mock configuration manager."""
+    config_manager = mock.Mock()
+    config_manager.get_config.return_value = DEFAULT_CONFIG
+    return config_manager
 
 
 @pytest.fixture
-def application(mock_callback: Callable[[str], None]) -> Application:
+def application(mock_config_manager: mock.Mock) -> Application:
     """Fixture to create an Application instance."""
     with mock.patch('src.Application.Viewer') as mock_viewer, \
          mock.patch('src.Application.Communicator') as mock_comm, \
          mock.patch('src.Application.setup_logger') as mock_logger:
         app = Application()
         app._logger = mock.Mock()
+        app._config_manager = mock_config_manager
         return app
 
 
@@ -33,10 +39,15 @@ def test_init(application: Application) -> None:
     assert hasattr(application, '_logger')
     assert hasattr(application, '_view')
     assert hasattr(application, '_communicator')
+    assert hasattr(application, '_request_lock')
+    assert hasattr(application, '_config_manager')
 
 
 @mock.patch('src.Application.threading.Thread')
-def test_start_communication(mock_thread: mock.Mock, application: Application) -> None:
+def test_start_communication(
+    mock_thread: mock.Mock,
+    application: Application
+) -> None:
     """Test the communication startup."""
     application._start_communication()
     
@@ -54,13 +65,32 @@ def test_start_gui(application: Application) -> None:
     application._view.run.assert_called_once()
 
 
-def test_handle_request(application: Application) -> None:
-    """Test request handling."""
-    test_request = '{"type": "test", "content": "message"}'
+def test_handle_request_ad_block(application: Application) -> None:
+    """Test handling ad block request."""
+    test_request = {
+        STR_CODE: Codes.CODE_AD_BLOCK,
+        STR_CONTENT: "test"
+    }
     
-    # Currently just testing logging as implementation is pending
+    application._communicator.send_message = mock.Mock()
+    
+    application._handle_request(json.dumps(test_request))
+    
+    actual_arg = application._communicator.send_message.call_args[0][0]
+    
+    assert json.loads(json.loads(actual_arg)) == test_request
+
+
+def test_handle_request_domain_list_update(application: Application) -> None:
+    """Test handling domain list update request."""
+    test_content = ["domain1.com", "domain2.com"]
+    test_request = json.dumps({
+        STR_CODE: Codes.CODE_DOMAIN_LIST_UPDATE,
+        STR_CONTENT: test_content
+    })
+    
     application._handle_request(test_request)
-    application._logger.debug.assert_called_once_with(f"Processing request: {test_request}")
+    application._view.update_domain_list.assert_called_once_with(test_content)
 
 
 def test_cleanup(application: Application) -> None:
@@ -102,4 +132,14 @@ def test_run_exception(application: Application) -> None:
             exc_info=True
         )
         mock_cleanup.assert_called_once()
+
+
+def test_handle_request_json_error(application: Application) -> None:
+    """Test handling of invalid JSON in request."""
+    invalid_json = "{"
+    
+    with pytest.raises(json.JSONDecodeError):
+        application._handle_request(invalid_json)
+    
+    application._logger.error.assert_called()
     

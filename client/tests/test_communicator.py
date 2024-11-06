@@ -4,7 +4,20 @@ from typing import Optional, Callable
 
 import pytest
 
-from src.Communicator import Communicator, HOST, PORT, RECEIVE_BUFFER_SIZE
+from src.Communicator import Communicator
+from src.utils import (
+    DEFAULT_HOST, DEFAULT_PORT, DEFAULT_BUFFER_SIZE,
+    ERR_SOCKET_NOT_SETUP, STR_NETWORK,
+    DEFAULT_CONFIG
+)
+
+
+@pytest.fixture
+def mock_config_manager() -> mock.Mock:
+    """Fixture to provide a mock configuration manager."""
+    config_manager = mock.Mock()
+    config_manager.get_config.return_value = DEFAULT_CONFIG
+    return config_manager
 
 
 @pytest.fixture
@@ -14,27 +27,45 @@ def mock_callback() -> Callable[[str], None]:
 
 
 @pytest.fixture
-def communicator(mock_callback: Callable[[str], None]) -> Communicator:
+def communicator(
+    mock_config_manager: mock.Mock,
+    mock_callback: Callable[[str], None]
+) -> Communicator:
     """Fixture to create a Communicator instance."""
-    return Communicator(message_callback=mock_callback)
+    return Communicator(
+        config_manager=mock_config_manager,
+        message_callback=mock_callback
+    )
 
 
-def test_init(communicator: Communicator, mock_callback: Callable[[str], None]) -> None:
+def test_init(
+    communicator: Communicator,
+    mock_callback: Callable[[str], None]
+) -> None:
     """Test the initialization of Communicator."""
-    assert communicator._host == HOST
-    assert communicator._port == PORT
+    assert communicator._host == DEFAULT_CONFIG[STR_NETWORK][DEFAULT_HOST]
+    assert communicator._port == DEFAULT_CONFIG[STR_NETWORK][DEFAULT_PORT]
+    assert communicator._receive_buffer_size == DEFAULT_CONFIG[STR_NETWORK][DEFAULT_BUFFER_SIZE]
     assert communicator._socket is None
     assert communicator._message_callback == mock_callback
 
 
 @mock.patch('socket.socket')
-def test_connect(mock_socket_class: mock.Mock, communicator: Communicator) -> None:
+def test_connect(
+    mock_socket_class: mock.Mock,
+    communicator: Communicator
+) -> None:
     """Test the connect method initializes and connects the socket."""
     mock_socket_instance = mock_socket_class.return_value
     communicator.connect()
     
-    mock_socket_class.assert_called_once_with(socket.AF_INET, socket.SOCK_STREAM)
-    mock_socket_instance.connect.assert_called_once_with((HOST, PORT))
+    mock_socket_class.assert_called_once_with(
+        socket.AF_INET,
+        socket.SOCK_STREAM
+    )
+    mock_socket_instance.connect.assert_called_once_with(
+        (communicator._host, communicator._port)
+    )
     assert communicator._socket is mock_socket_instance
 
 
@@ -46,11 +77,14 @@ def test_send_message_without_setup(
     """Test sending a message without setting up the socket raises RuntimeError."""
     with pytest.raises(RuntimeError) as exc_info:
         communicator.send_message("Hello")
-    assert str(exc_info.value) == "Socket not set up. Call connect method first."
+    assert str(exc_info.value) == ERR_SOCKET_NOT_SETUP
 
 
 @mock.patch('socket.socket')
-def test_send_message(mock_socket_class: mock.Mock, communicator: Communicator) -> None:
+def test_send_message(
+    mock_socket_class: mock.Mock,
+    communicator: Communicator
+) -> None:
     """Test sending a message successfully."""
     mock_socket_instance = mock_socket_class.return_value
     communicator._socket = mock_socket_instance
@@ -58,7 +92,9 @@ def test_send_message(mock_socket_class: mock.Mock, communicator: Communicator) 
     message: str = "Hello, World!"
     communicator.send_message(message)
 
-    mock_socket_instance.send.assert_called_once_with(message.encode('utf-8'))
+    mock_socket_instance.send.assert_called_once_with(
+        message.encode('utf-8')
+    )
 
 
 @mock.patch('socket.socket')
@@ -69,7 +105,7 @@ def test_receive_message_without_setup(
     """Test receiving a message without setting up the socket raises RuntimeError."""
     with pytest.raises(RuntimeError) as exc_info:
         communicator.receive_message()
-    assert str(exc_info.value) == "Socket not set up. Call connect method first."
+    assert str(exc_info.value) == ERR_SOCKET_NOT_SETUP
 
 
 @mock.patch('socket.socket')
@@ -82,17 +118,21 @@ def test_receive_message(
     mock_socket_instance = mock_socket_class.return_value
     communicator._socket = mock_socket_instance
 
-    # Setup mock to return a message once and then empty string to break the loop
     mock_socket_instance.recv.side_effect = [b'Hello, Client!', b'']
     
     communicator.receive_message()
 
-    mock_socket_instance.recv.assert_called_with(RECEIVE_BUFFER_SIZE)
+    mock_socket_instance.recv.assert_called_with(
+        DEFAULT_CONFIG[STR_NETWORK][DEFAULT_BUFFER_SIZE]
+    )
     mock_callback.assert_called_once_with('Hello, Client!')
 
 
 @mock.patch('socket.socket')
-def test_close_socket(mock_socket_class: mock.Mock, communicator: Communicator) -> None:
+def test_close_socket(
+    mock_socket_class: mock.Mock,
+    communicator: Communicator
+) -> None:
     """Test closing the socket."""
     mock_socket_instance = mock_socket_class.return_value
     communicator._socket = mock_socket_instance
@@ -113,7 +153,6 @@ def test_receive_message_decode_error(
     mock_socket_instance = mock_socket_class.return_value
     communicator._socket = mock_socket_instance
 
-    # Setup mock to return invalid UTF-8 bytes
     mock_socket_instance.recv.side_effect = [bytes([0xFF, 0xFE, 0xFD]), b'']
     
     with pytest.raises(UnicodeDecodeError):
