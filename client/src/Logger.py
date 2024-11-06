@@ -4,8 +4,8 @@ import logging
 import os
 from datetime import datetime
 from typing import Optional
+from .utils import LOG_DIR, LOG_FORMAT, LOG_DATE_FORMAT
 
-LOG_DIR = "client_logs"
 _logger: Optional[logging.Logger] = None
 
 def setup_logger(name: str) -> logging.Logger:
@@ -27,12 +27,12 @@ def setup_logger(name: str) -> logging.Logger:
         os.makedirs(LOG_DIR)
 
     log_file: str = os.path.join(
-        LOG_DIR, f"Client_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        LOG_DIR, f"Client_{datetime.now().strftime(LOG_DATE_FORMAT)}.log"
     )
     
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        format=LOG_FORMAT,
         handlers=[
             logging.FileHandler(log_file),
             logging.StreamHandler(),

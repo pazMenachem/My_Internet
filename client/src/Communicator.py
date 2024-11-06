@@ -2,6 +2,11 @@ import socket
 from typing import Optional, Callable
 import json
 from .Logger import setup_logger
+from .utils import (
+    DEFAULT_HOST, DEFAULT_PORT, DEFAULT_BUFFER_SIZE,
+    ERR_SOCKET_NOT_SETUP, 
+    STR_NETWORK
+)
 
 class Communicator:
     def __init__(self, config_manager, message_callback: Callable[[str], None]) -> None:
@@ -17,9 +22,9 @@ class Communicator:
         self.config = config_manager.get_config()
         self._message_callback = message_callback
         
-        self._host = self.config["network"]["host"]
-        self._port = self.config["network"]["port"]
-        self._receive_buffer_size = self.config["network"]["receive_buffer_size"]
+        self._host = self.config[STR_NETWORK][DEFAULT_HOST]
+        self._port = self.config[STR_NETWORK][DEFAULT_PORT]
+        self._receive_buffer_size = self.config[STR_NETWORK][DEFAULT_BUFFER_SIZE]
         self._socket: Optional[socket.socket] = None
 
     def connect(self) -> None:
@@ -47,9 +52,7 @@ class Communicator:
         Raises:
             RuntimeError: If socket connection is not established.
         """
-        if not self._socket:
-            self.logger.error("Attempted to send message without connection")
-            raise RuntimeError("Socket not set up. Call connect method first.")
+        self._validate_connection()
 
         try:
             self._socket.send(message.encode('utf-8'))
@@ -69,9 +72,7 @@ class Communicator:
             socket.error: If there's an error receiving data from the socket.
             UnicodeDecodeError: If received data cannot be decoded as UTF-8.
         """
-        if not self._socket:
-            self.logger.error("Attempted to receive message without connection")
-            raise RuntimeError("Socket not set up. Call connect method first.")
+        self._validate_connection()
 
         self.logger.info("Starting message receive loop")
         try:
@@ -96,3 +97,9 @@ class Communicator:
                 self.logger.error(f"Error closing socket: {str(e)}")
             finally:
                 self._socket = None
+    
+    def _validate_connection(self) -> None:
+        """Validate the socket connection."""
+        if not self._socket:
+            self.logger.error(ERR_SOCKET_NOT_SETUP)
+            raise RuntimeError(ERR_SOCKET_NOT_SETUP)

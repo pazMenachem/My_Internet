@@ -5,6 +5,11 @@ from .View import Viewer
 from .Logger import setup_logger
 from .ConfigManager import ConfigManager
 
+from .utils import (
+    STR_CODE, STR_CONTENT,
+    Codes
+)
+
 class Application:
     """
     Main application class that coordinates communication between UI and server.
@@ -78,16 +83,17 @@ class Application:
         """
         try:
             self._logger.info(f"Processing request: {request}")
+            request_dict = json.loads(request)
             
             with self._request_lock:
-                match request["CODE"]:
-                    case "50" | "51" | "52":
-                        self._communicator.send_message(request)
-                    case "53":
-                        if not isinstance(request["content"], list):
-                            self._logger.error("Invalid content format for domain list update")
-                            return
-                        self._view.update_domain_list(request["content"])
+                match request_dict[STR_CODE]:
+                    case Codes.CODE_AD_BLOCK      | \
+                         Codes.CODE_ADULT_BLOCK   | \
+                         Codes.CODE_ADD_DOMAIN    | \
+                         Codes.CODE_REMOVE_DOMAIN:
+                        self._communicator.send_message(json.dumps(request))
+                    case Codes.CODE_DOMAIN_LIST_UPDATE:
+                        self._view.update_domain_list(request_dict[STR_CONTENT])
 
         except json.JSONDecodeError as e:
             self._logger.error(f"Invalid JSON format: {str(e)}")

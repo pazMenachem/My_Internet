@@ -4,23 +4,8 @@ import json
 import os
 from typing import Dict, Any
 from .Logger import setup_logger
+from .utils import DEFAULT_CONFIG
 
-DEFAULT_CONFIG = {
-    "network": {
-        "host": "127.0.0.1",
-        "port": 65432,
-        "receive_buffer_size": 1024
-    },
-    "blocked_domains": {},
-    "settings": {
-        "ad_block": "off",
-        "adult_block": "off"
-    },
-    "logging": {
-        "level": "INFO",
-        "log_dir": "client_logs"
-    }
-}
 
 class ConfigManager:
     """Manages application configuration loading and saving."""

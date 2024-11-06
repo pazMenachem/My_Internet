@@ -1,10 +1,18 @@
 import tkinter as tk
-from tkinter import scrolledtext, ttk, messagebox
-from typing import Callable, Dict, List, Any
+from tkinter import ttk, messagebox
+from typing import Callable, List
 import json
-import os
+import threading
 from .Logger import setup_logger
 from .ConfigManager import ConfigManager
+
+from .utils import (
+    Codes,
+    WINDOW_SIZE, WINDOW_TITLE,
+    ERR_DUPLICATE_DOMAIN, ERR_NO_DOMAIN_SELECTED, ERR_DOMAIN_LIST_UPDATE_FAILED,
+    STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE,
+    STR_BLOCKED_DOMAINS, STR_CONTENT, STR_SETTINGS, STR_ERROR
+)
 
 
 class Viewer:
@@ -25,10 +33,12 @@ class Viewer:
         self.config_manager = config_manager
         self.config = config_manager.get_config()
         self._message_callback = message_callback
+        self._update_list_lock = threading.Lock()
+
         
         self.root: tk.Tk = tk.Tk()
-        self.root.title("Site Blocker")
-        self.root.geometry("800x600")
+        self.root.title(WINDOW_TITLE)
+        self.root.geometry(WINDOW_SIZE)
         
         self._setup_ui()
         self.logger.info("Viewer initialization complete")
@@ -55,8 +65,8 @@ class Viewer:
             A dictionary containing the current state of ad and adult content blocking.
         """
         return {
-            "ad_block": self.ad_var.get(),
-            "adult_block": self.adult_var.get()
+            STR_AD_BLOCK: self.ad_var.get(),
+            STR_ADULT_BLOCK: self.adult_var.get()
         }
 
     def update_domain_list(self, domains: List[str]) -> None:
@@ -66,75 +76,89 @@ class Viewer:
         Args:
             domains: List of domain strings to be displayed in the listbox.
         """
-        self.logger.info("Updating domain list from server")
-        try:
-            self.domains_listbox.delete(0, tk.END)
-            
-            for domain in domains:
-                self.domains_listbox.insert(tk.END, domain)
-                
-            self.logger.info(f"Updated domain list with {len(domains)} domains")
-        except Exception as e:
-            self.logger.error(f"Error updating domain list: {str(e)}")
-            self._show_error("Failed to update domain list")
+        with self._update_list_lock:
+            self.logger.info("Updating domain list from server")
 
-    def _send_message(self) -> None:
-        """Handle the sending of messages from the input field."""
-        message = self.input_field.get().strip()
-        if message:
-            message_json = json.dumps({"CODE": "100", "content": message})
-            self._message_callback(message_json)
-            self.input_field.delete(0, tk.END)
-            self.display_message("You", message)
+            try:
+                self.domains_listbox.delete(0, tk.END)
+                
+                for domain in domains:
+                    self.domains_listbox.insert(tk.END, domain)
+                    
+                self.logger.info(f"Updated domain list with {len(domains)} domains")
+
+            except Exception as e:
+                self.logger.error(f"Error updating domain list: {str(e)}")
+                self._show_error(ERR_DOMAIN_LIST_UPDATE_FAILED)
 
     def _add_domain(self) -> None:
         """Add a domain to the blocked sites list."""
         domain = self.domain_entry.get().strip()
+        
         if domain:
-            if domain not in self.config["blocked_domains"]:
+            if domain not in self.config[STR_BLOCKED_DOMAINS]:
                 self.domains_listbox.insert(tk.END, domain)
-                self.config["blocked_domains"][domain] = True
                 self.domain_entry.delete(0, tk.END)
+
+                self.config[STR_BLOCKED_DOMAINS][domain] = True
                 self.config_manager.save_config(self.config)
+
+                self._message_callback(json.dumps({
+                    STR_CODE: Codes.CODE_ADD_DOMAIN,
+                    STR_CONTENT: domain
+                    }))
+
                 self.logger.info(f"Domain added: {domain}")
-                
-                self._message_callback(json.dumps({"CODE": "53", "content": domain}))
             else:
                 self.logger.warning(f"Attempted to add duplicate domain: {domain}")
-                self._show_error("Domain already exists in the list")
+                self._show_error(ERR_DUPLICATE_DOMAIN)
                 
     def _remove_domain(self) -> None:
         """Remove the selected domain from the blocked sites list."""
         selection = self.domains_listbox.curselection()
+        
         if selection:
             domain = self.domains_listbox.get(selection)
             self.domains_listbox.delete(selection)
-            del self.config["blocked_domains"][domain]
-            self.config_manager.save_config(self.config)
-            self.logger.info(f"Domain removed: {domain}")
             
-            self._message_callback(json.dumps({"CODE": "54", "content": domain}))
+            del self.config[STR_BLOCKED_DOMAINS][domain]
+            self.config_manager.save_config(self.config)
+            
+            self._message_callback(json.dumps({
+                STR_CODE: Codes.CODE_REMOVE_DOMAIN,
+                STR_CONTENT: domain
+                }))
+            
+            self.logger.info(f"Domain removed: {domain}")
         else:
             self.logger.warning("Attempted to remove domain without selection")
-            self._show_error("Please select a domain to remove")
+            self._show_error(ERR_NO_DOMAIN_SELECTED)
 
     def _handle_ad_block(self) -> None:
         """Handle changes to the ad block setting."""
         state = self.ad_var.get()
-        self.config["settings"]["ad_block"] = state
+        self.config[STR_SETTINGS][STR_AD_BLOCK] = state
         self.config_manager.save_config(self.config)
-        self.logger.info(f"Ad blocking state changed to: {state}")
         
-        self._message_callback(json.dumps({"CODE": "50", "content": state}))
+        self._message_callback(json.dumps({
+            STR_CODE: Codes.CODE_AD_BLOCK,
+            STR_CONTENT: state
+            }))
+        
+        self.logger.info(f"Ad blocking state changed to: {state}")
 
     def _handle_adult_block(self) -> None:
         """Handle changes to the adult sites block setting."""
         state = self.adult_var.get()
-        self.config["settings"]["adult_block"] = state
+        self.config[STR_SETTINGS][STR_ADULT_BLOCK] = state
         self.config_manager.save_config(self.config)
-        self.logger.info(f"Adult site blocking state changed to: {state}")
         
-        self._message_callback(json.dumps({"CODE": "51", "content": state}))
+        self._message_callback(json.dumps({
+            STR_CODE: Codes.CODE_ADULT_BLOCK,
+            STR_CONTENT: state
+            }))
+        
+        self.logger.info(f"Adult site blocking state changed to: {state}")
 
     def _show_error(self, message: str) -> None:
         """
@@ -144,7 +168,7 @@ class Viewer:
             message: The error message to display.
         """
         self.logger.error(f"Error message displayed: {message}")
-        tk.messagebox.showerror("Error", message)
+        tk.messagebox.showerror(STR_ERROR, message)
 
     def _setup_ui(self) -> None:
         """Set up the UI components including block controls and domain list."""
@@ -180,14 +204,14 @@ class Viewer:
         self.domains_listbox.bind('<Double-Button-1>', lambda e: self._remove_domain())
         
         # Load saved domains into listbox
-        for domain in self.config["blocked_domains"].keys():
+        for domain in self.config[STR_BLOCKED_DOMAINS].keys():
             self.domains_listbox.insert(tk.END, domain)
-        
+
         # Ad Block controls
         ad_frame = ttk.LabelFrame(main_container, text="Ad Block", padding="5")
         ad_frame.grid(row=0, column=1, pady=10, sticky=(tk.W, tk.E))
         
-        self.ad_var = tk.StringVar(value=self.config["settings"]["ad_block"])
+        self.ad_var = tk.StringVar(value=self.config[STR_SETTINGS][STR_AD_BLOCK])
         ttk.Radiobutton(ad_frame, text="on", value="on", variable=self.ad_var).grid(row=0, column=0, padx=10)
         ttk.Radiobutton(ad_frame, text="off", value="off", variable=self.ad_var).grid(row=0, column=1, padx=10)
         
@@ -195,7 +219,7 @@ class Viewer:
         adult_frame = ttk.LabelFrame(main_container, text="Adult sites Block", padding="5")
         adult_frame.grid(row=1, column=1, pady=10, sticky=(tk.W, tk.E))
         
-        self.adult_var = tk.StringVar(value=self.config["settings"]["adult_block"])
+        self.adult_var = tk.StringVar(value=self.config[STR_SETTINGS][STR_ADULT_BLOCK])
         ttk.Radiobutton(adult_frame, text="on", value="on", variable=self.adult_var).grid(row=0, column=0, padx=10)
         ttk.Radiobutton(adult_frame, text="off", value="off", variable=self.adult_var).grid(row=0, column=1, padx=10)
         
