@@ -41,7 +41,7 @@ class Application:
         self._logger.info("Starting application")
         
         try:
-            # self._start_communication()
+            self._start_communication()
             self._start_gui()
             
         except Exception as e:
