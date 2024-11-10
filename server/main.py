@@ -1,5 +1,5 @@
-from src.server import run
+from src.server import initialize_server
 from src.config import DB_FILE
 
 if __name__ == '__main__':
-    run(DB_FILE)
+    initialize_server(DB_FILE)

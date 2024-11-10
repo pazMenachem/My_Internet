@@ -1,6 +1,8 @@
 import sqlite3
+import json
 from typing import List, Dict, Any, Optional
 import requests
+from .filter_rules import FilterRule, PatternType
 
 class DatabaseManager:
     def __init__(self, db_file: str):
@@ -12,7 +14,14 @@ class DatabaseManager:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             
-            # Blocked domains table
+            # Drop existing indices first to avoid conflicts
+            cursor.execute("DROP INDEX IF EXISTS idx_pattern_type")
+            cursor.execute("DROP INDEX IF EXISTS idx_processed_pattern")
+            
+            # Drop existing tables to ensure clean schema
+            cursor.execute("DROP TABLE IF EXISTS easylist")
+            
+            # Create tables
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS blocked_domains (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -20,15 +29,16 @@ class DatabaseManager:
                 )
             """)
             
-            # Easylist entries table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS easylist (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    entry TEXT UNIQUE
+                    raw_pattern TEXT UNIQUE,
+                    pattern_type TEXT NOT NULL,
+                    processed_pattern TEXT NOT NULL,
+                    options TEXT
                 )
             """)
             
-            # Settings table for toggles
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     setting TEXT PRIMARY KEY,
@@ -36,12 +46,23 @@ class DatabaseManager:
                 )
             """)
             
-            # Initialize settings if not exists
+            # Initialize settings
             cursor.execute("""
                 INSERT OR IGNORE INTO settings (setting, value)
                 VALUES 
                     ('ad_block', 'off'),
                     ('adult_block', 'off')
+            """)
+            
+            # Create indices after tables are created
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_pattern_type 
+                ON easylist(pattern_type)
+            """)
+            
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_processed_pattern 
+                ON easylist(processed_pattern)
             """)
             
             conn.commit()
@@ -97,25 +118,80 @@ class DatabaseManager:
             cursor.execute("SELECT 1 FROM blocked_domains WHERE domain = ?", (domain,))
             return cursor.fetchone() is not None
 
-    def store_easylist_entries(self, entries: List[tuple]) -> None:
-        """Store easylist entries."""
+    def store_filter_rule(self, rule: FilterRule) -> None:
+        """Store a single filter rule in easylist table."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.executemany(
-                "INSERT OR IGNORE INTO easylist (entry) VALUES (?)", 
-                entries
-            )
+            cursor.execute("""
+                INSERT OR REPLACE INTO easylist 
+                (raw_pattern, pattern_type, processed_pattern, options)
+                VALUES (?, ?, ?, ?)
+            """, (
+                rule.raw_pattern,
+                rule.pattern_type.value,
+                rule.processed_pattern,
+                json.dumps(rule.options)
+            ))
+            conn.commit()
+
+    def store_easylist_entries(self, entries: List[str]) -> None:
+        """Store easylist entries with proper pattern parsing."""
+        rules = []
+        for entry in entries:
+            try:
+                rule = FilterRule(entry)
+                rules.append((
+                    rule.raw_pattern,
+                    rule.pattern_type.value,
+                    rule.processed_pattern,
+                    json.dumps(rule.options)
+                ))
+            except Exception as e:
+                print(f"Error parsing rule '{entry}': {e}")
+                continue
+
+        with sqlite3.connect(self.db_file) as conn:
+            cursor = conn.cursor()
+            cursor.executemany("""
+                INSERT OR IGNORE INTO easylist 
+                (raw_pattern, pattern_type, processed_pattern, options)
+                VALUES (?, ?, ?, ?)
+            """, rules)
             conn.commit()
 
     def is_easylist_blocked(self, domain: str) -> bool:
         """Check if domain matches any easylist pattern."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT 1 FROM easylist WHERE ? GLOB '*' || entry || '*'", 
-                (domain,)
-            )
-            return cursor.fetchone() is not None
+            
+            # First check exceptions
+            cursor.execute("""
+                SELECT raw_pattern, pattern_type, processed_pattern, options 
+                FROM easylist 
+                WHERE pattern_type = ?
+            """, (PatternType.EXCEPTION.value,))
+            
+            for row in cursor.fetchall():
+                rule = FilterRule(row[0])
+                if rule.matches(domain, domain):  # Using domain as both URL and domain
+                    print(f"Domain {domain} matched exception rule: {row[0]}")
+                    return False
+            
+            # Then check blocking rules
+            cursor.execute("""
+                SELECT raw_pattern, pattern_type, processed_pattern, options 
+                FROM easylist 
+                WHERE pattern_type != ?
+            """, (PatternType.EXCEPTION.value,))
+            
+            for row in cursor.fetchall():
+                rule = FilterRule(row[0])
+                if rule.matches(domain, domain):
+                    print(f"Domain {domain} matched blocking rule: {row[0]}")
+                    return True
+            
+            print(f"Domain {domain} did not match any patterns")
+            return False
 
     def clear_easylist(self) -> None:
         """Clear all easylist entries."""

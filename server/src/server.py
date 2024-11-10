@@ -1,173 +1,123 @@
-import asyncio
+import socket
+import threading
 import json
+import asyncio
 from typing import Dict, Any
 from .config import HOST, CLIENT_PORT, KERNEL_PORT
 from .db_manager import DatabaseManager
 from .handlers import RequestFactory
-from .response_codes import Codes, RESPONSE_MESSAGES
 
 class Server:
-    def __init__(self, db_file: str):
-        """Initialize server with database and request factory."""
-        self.db_manager = DatabaseManager(db_file)
+    def __init__(self, db_manager: DatabaseManager) -> None:
+        self.db_manager = db_manager
         self.request_factory = RequestFactory(self.db_manager)
-        self.client_writer = None  # Store the single client connection
+        self.running = True
 
-    async def handle_client(
-        self,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter
-    ) -> None:
-        """Handle the client connection."""
-        # Store the client writer for potential updates
-        self.client_writer = writer
-        print(f"Client connected from {writer.get_extra_info('peername')}")
-
-        try:
-            # Send initial domain list to client
-            await self._send_domain_list()
-
-            while True:
-                data = await reader.readline()
-                if not data:
-                    break
-
-                try:
-                    request_data = json.loads(data.decode('utf-8'))
-                    print(f"Received from client: {request_data}")
-
-                    # Process request
-                    response = self.request_factory.handle_request(request_data)
-                    print(f"Sending response: {response}")
-
-                    # Send response
-                    writer.write(json.dumps(response).encode('utf-8') + b'\n')
-                    await writer.drain()
-
-                    # If domain list was modified, send update
-                    if request_data.get('code') in [Codes.CODE_ADD_DOMAIN, Codes.CODE_REMOVE_DOMAIN]:
-                        await self._send_domain_list()
-
-                except json.JSONDecodeError:
-                    print("Invalid JSON received")
-                    error_response = {
-                        'code': request_data.get('code', ''),
-                        'message': RESPONSE_MESSAGES['invalid_request']
-                    }
-                    writer.write(json.dumps(error_response).encode('utf-8') + b'\n')
-                    await writer.drain()
-
-        except Exception as e:
-            print(f"Error handling client: {e}")
-        finally:
-            self.client_writer = None
-            writer.close()
-            await writer.wait_closed()
-            print("Client disconnected")
-
-    async def handle_kernel(
-        self,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter
-    ) -> None:
-        """Handle kernel module connections."""
-        print(f"Kernel module connected from {writer.get_extra_info('peername')}")
-
-        try:
-            while True:
-                data = await reader.readline()
-                if not data:
-                    break
-
-                try:
-                    request_data = json.loads(data.decode('utf-8'))
-                    print(f"Received from kernel: {request_data}")
-
-                    # Process kernel request
-                    response = self.handle_kernel_request(request_data)
-                    print(f"Sending to kernel: {response}")
-
-                    writer.write(json.dumps(response).encode('utf-8') + b'\n')
-                    await writer.drain()
-
-                except json.JSONDecodeError:
-                    print("Invalid JSON received from kernel")
-
-        except Exception as e:
-            print(f"Error handling kernel module: {e}")
-        finally:
-            writer.close()
-            await writer.wait_closed()
-            print("Kernel module disconnected")
-
-    def handle_kernel_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Process kernel module requests."""
-        domain = request_data.get('domain')
-        if not domain:
-            return {'block': False}
-
-        # Check if domain should be blocked
-        should_block = (
-            # Check manually blocked domains
-            self.db_manager.is_domain_blocked(domain) or
-            # Check ad blocking
-            (
-                self.db_manager.get_setting('ad_block') == 'on' and
-                self.db_manager.is_easylist_blocked(domain)
-            ) or
-            # Check adult content blocking
-            (
-                self.db_manager.get_setting('adult_block') == 'on' and
-                'adult' in request_data.get('categories', [])
-            )
-        )
-
-        return {'block': should_block}
-
-    async def _send_domain_list(self) -> None:
-        """Send updated domain list to client."""
-        if self.client_writer:
-            domains = self.db_manager.get_blocked_domains()
-            update_message = {
-                'code': Codes.CODE_DOMAIN_LIST_UPDATE,
-                'content': domains
-            }
-            try:
-                self.client_writer.write(json.dumps(update_message).encode('utf-8') + b'\n')
-                await self.client_writer.drain()
-            except Exception as e:
-                print(f"Error sending domain list update: {e}")
-
-async def start_server(db_manager: DatabaseManager) -> None:
-    """Start the server with both client and kernel handlers."""
-    server = Server(db_manager.db_file)
-
-    client_server = await asyncio.start_server(
-        server.handle_client,
-        HOST,
-        CLIENT_PORT
-    )
-
-    kernel_server = await asyncio.start_server(
-        server.handle_kernel,
-        HOST,
-        KERNEL_PORT
-    )
-
-    async with client_server, kernel_server:
+    def handle_client_thread(self) -> None:
+        """Handle client connections using traditional socket."""
+        client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client_socket.bind((HOST, CLIENT_PORT))
+        client_socket.listen(1)  # Only one client needed
         print(f"Client server running on {HOST}:{CLIENT_PORT}")
-        print(f"Kernel server running on {HOST}:{KERNEL_PORT}")
-        
-        await asyncio.gather(
-            client_server.serve_forever(),
-            kernel_server.serve_forever()
-        )
 
-def run(db_file: str) -> None:
+        while self.running:
+            try:
+                conn, addr = client_socket.accept()
+                print(f"Client connected from {addr}")
+                
+                # Send initial domain list
+                domains = self.db_manager.get_blocked_domains()
+                conn.send(json.dumps({
+                    'type': 'domain_list',
+                    'domains': domains
+                }).encode() + b'\n')
+
+                while True:
+                    data = conn.recv(1024)
+                    if not data:
+                        break
+
+                    try:
+                        request_data = json.loads(data.decode())
+                        response = self.request_factory.handle_request(request_data)
+                        conn.send(json.dumps(response).encode() + b'\n')
+                    except json.JSONDecodeError:
+                        conn.send(json.dumps({
+                            'status': 'error',
+                            'message': 'Invalid JSON format'
+                        }).encode() + b'\n')
+                    except Exception as e:
+                        conn.send(json.dumps({
+                            'status': 'error',
+                            'message': str(e)
+                        }).encode() + b'\n')
+
+            except Exception as e:
+                print(f"Client error: {e}")
+            finally:
+                if 'conn' in locals():
+                    conn.close()
+
+    async def handle_kernel_requests(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        """Handle kernel requests using asyncio for better performance."""
+        addr = writer.get_extra_info('peername')
+        print(f"Kernel module connected from {addr}")
+
+        try:
+            while True:
+                data = await reader.readline()
+                if not data:
+                    break
+
+                request_data = json.loads(data.decode())
+                domain = request_data.get('domain')
+
+                # Fast domain check
+                should_block = (
+                    self.db_manager.is_domain_blocked(domain) or
+                    (self.db_manager.get_setting('ad_block') == 'on' and
+                     self.db_manager.is_easylist_blocked(domain)) or
+                    (self.db_manager.get_setting('adult_block') == 'on' and
+                     'adult' in request_data.get('categories', []))
+                )
+
+                writer.write(json.dumps({'block': should_block}).encode() + b'\n')
+                await writer.drain()
+
+        except Exception as e:
+            print(f"Kernel error: {e}")
+        finally:
+            writer.close()
+            await writer.wait_closed()
+
+    def start_server(self) -> None:
+        """Run both client and kernel handlers."""
+        try:
+            # Start client handler in a separate thread
+            client_thread = threading.Thread(target=self.handle_client_thread)
+            client_thread.start()
+
+            # Run kernel handler with asyncio
+            async def start_kernel_server() -> None:
+                kernel_server = await asyncio.start_server(
+                    self.handle_kernel_requests,
+                    HOST,
+                    KERNEL_PORT
+                )
+                print(f"Kernel server running on {HOST}:{KERNEL_PORT}")
+                await kernel_server.serve_forever()
+
+            # Run the asyncio event loop for kernel handler
+            asyncio.run(start_kernel_server())
+
+        except KeyboardInterrupt:
+            self.running = False
+            print("\nServer stopping...")
+        except Exception as e:
+            print(f"Server error: {e}")
+
+def initialize_server(db_file: str) -> None:
     """Initialize and run the server."""
-    try:
-        asyncio.run(start_server(DatabaseManager(db_file)))
-    except KeyboardInterrupt:
-        print("\nServer stopped by user")
-    except Exception as e:
-        print(f"Server error: {str(e)}")
+    db_manager = DatabaseManager(db_file)
+    server = Server(db_manager)
+    server.start_server()

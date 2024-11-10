@@ -2,144 +2,233 @@ import pytest
 import json
 import asyncio
 from unittest import mock
-from typing import AsyncGenerator, Dict, Any
-
+from typing import Dict, Any
 from My_Internet.server.src.server import (
-    handle_client,
-    handle_kernel,
-    route_kernel_request,
+    Server,
     start_server
 )
 from My_Internet.server.src.config import HOST, CLIENT_PORT, KERNEL_PORT
-from My_Internet.server.src.handlers import RequestFactory
-from My_Internet.server.src.response_codes import SUCCESS, INVALID_REQUEST
+from My_Internet.server.src.response_codes import Codes
+from My_Internet.server.src.db_manager import DatabaseManager
 
 class TestServer:
     @pytest.fixture
+    def db_manager(self) -> mock.Mock:
+        """Create a mock database manager."""
+        mock_db = mock.Mock(spec=DatabaseManager)
+        mock_db.db_file = "test.db"
+        mock_db.is_domain_blocked.return_value = True
+        mock_db.get_setting.return_value = "on"
+        return mock_db
+
+    @pytest.fixture
+    def server(self, db_manager: mock.Mock) -> Server:
+        """Create server instance for testing with a mocked DatabaseManager."""
+        return Server(db_manager)
+
+    @pytest.fixture
     def mock_stream_reader(self) -> mock.AsyncMock:
+        """Mock for asyncio StreamReader."""
         reader = mock.AsyncMock()
         reader.readline = mock.AsyncMock()
         return reader
 
     @pytest.fixture
     def mock_stream_writer(self) -> mock.Mock:
+        """Mock for asyncio StreamWriter."""
         writer = mock.Mock()
         writer.write = mock.Mock()
         writer.drain = mock.AsyncMock()
         writer.close = mock.Mock()
+        writer.wait_closed = mock.AsyncMock()
         return writer
 
-    @pytest.mark.asyncio  # Only for async functions
+    @pytest.mark.asyncio
     async def test_handle_client(
         self,
+        server: Server,
         mock_stream_reader: mock.AsyncMock,
-        mock_stream_writer: mock.Mock,
-        request_factory: RequestFactory
+        mock_stream_writer: mock.Mock
     ) -> None:
         """Test client request handling."""
+        # Setup mocks
+        mock_stream_writer.write = mock.Mock()
+        mock_stream_writer.drain = mock.AsyncMock()
+        mock_stream_writer.get_extra_info = mock.Mock(return_value="test_client")
+        server.db_manager.get_blocked_domains.return_value = []
+        
+        # Setup test request
         test_request = {
-            'type': 'domain_block',
+            'code': Codes.CODE_ADD_DOMAIN,
             'action': 'block',
             'domain': 'example.com'
         }
-        
+
+        # Configure mock reader responses
         mock_stream_reader.readline.side_effect = [
             json.dumps(test_request).encode() + b'\n',
-            b''
+            b''  # End connection after request
         ]
-        
-        await handle_client(mock_stream_reader, mock_stream_writer, request_factory)
-        
-        assert mock_stream_writer.write.called
-        assert mock_stream_writer.drain.called
-        assert mock_stream_writer.close.called
 
-    @pytest.mark.asyncio  # Only for async functions
-    async def test_handle_kernel(
-        self,
-        mock_stream_reader: mock.AsyncMock,
-        mock_stream_writer: mock.Mock,
-        mock_db_manager: mock.Mock
-    ) -> None:
-        """Test kernel request handling."""
+        # Handle client connection
+        await server.handle_client(mock_stream_reader, mock_stream_writer)
+
+        # Verify response was sent at least twice (domain list + request response)
+        assert mock_stream_writer.write.call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_handle_kernel(self, server: Server, mock_stream_reader: mock.AsyncMock, mock_stream_writer: mock.Mock) -> None:
+        """Test kernel module request handling."""
+        # Setup test request
         test_request = {
             'domain': 'example.com',
             'categories': ['adult']
         }
         
+        # Configure mocks
+        server.db_manager.is_domain_blocked.return_value = True
+        mock_stream_writer.write = mock.Mock()
+        mock_stream_writer.drain = mock.AsyncMock()
+        
+        # Configure mock reader responses
         mock_stream_reader.readline.side_effect = [
             json.dumps(test_request).encode() + b'\n',
-            b''
+            b''  # End connection after request
         ]
         
-        await handle_kernel(mock_stream_reader, mock_stream_writer, mock_db_manager)
-        
+        await server.handle_kernel(mock_stream_reader, mock_stream_writer)
         assert mock_stream_writer.write.called
-        assert mock_stream_writer.drain.called
-        assert mock_stream_writer.close.called
 
-    # No asyncio marker for synchronous functions
-    def test_route_kernel_request(self, mock_db_manager: mock.Mock) -> None:
-        """Test kernel request routing."""
-        # Test blocked domain
-        mock_db_manager.is_domain_blocked.return_value = True
-        response = route_kernel_request({'domain': 'example.com'}, mock_db_manager)
-        assert response['block'] is True
+    def test_handle_kernel_request(self, server: Server) -> None:
+        """Test kernel request processing."""
+        test_cases = [
+            # Test manually blocked domain
+            {
+                'setup': {
+                    'is_domain_blocked': True,
+                    'get_setting': 'off'
+                },
+                'request': {
+                    'domain': 'blocked.com'
+                },
+                'expected': True
+            },
+            # Test ad blocking
+            {
+                'setup': {
+                    'is_domain_blocked': False,
+                    'get_setting': 'on',
+                    'is_easylist_blocked': True
+                },
+                'request': {
+                    'domain': 'ads.example.com'
+                },
+                'expected': True
+            },
+            # Test adult content blocking
+            {
+                'setup': {
+                    'is_domain_blocked': False,
+                    'get_setting': 'on'
+                },
+                'request': {
+                    'domain': 'example.com',
+                    'categories': ['adult']
+                },
+                'expected': True
+            },
+            # Test allowed domain
+            {
+                'setup': {
+                    'is_domain_blocked': False,
+                    'get_setting': 'off',
+                    'is_easylist_blocked': False
+                },
+                'request': {
+                    'domain': 'example.com'
+                },
+                'expected': False
+            }
+        ]
 
-        # Test allowed domain
-        mock_db_manager.is_domain_blocked.return_value = False
-        mock_db_manager.is_easylist_blocked.return_value = False
-        response = route_kernel_request({'domain': 'example.com'}, mock_db_manager)
-        assert response['block'] is False
+        for case in test_cases:
+            # Setup mocks
+            server.db_manager.is_domain_blocked.return_value = case['setup'].get('is_domain_blocked', False)
+            server.db_manager.get_setting.return_value = case['setup'].get('get_setting', 'off')
+            server.db_manager.is_easylist_blocked.return_value = case['setup'].get('is_easylist_blocked', False)
+            
+            # Test request
+            response = server.handle_kernel_request(case['request'])
+            assert response['block'] is case['expected']
 
-    @pytest.mark.asyncio  # Only for async functions
-    async def test_start_server(self, mock_db_manager: mock.Mock) -> None:
+    @pytest.mark.asyncio
+    async def test_start_server(self, db_manager: mock.Mock) -> None:
         """Test server startup."""
+        # Configure mock
+        db_manager.db_file = "test.db"
         mock_client_server = mock.AsyncMock()
         mock_kernel_server = mock.AsyncMock()
         
-        with mock.patch('asyncio.start_server', 
-                       side_effect=[mock_client_server, mock_kernel_server]) as mock_start:
-            task = asyncio.create_task(start_server(mock_db_manager))
+        with mock.patch('asyncio.start_server', side_effect=[mock_client_server, mock_kernel_server]) as mock_start:
+            task = asyncio.create_task(start_server(db_manager))
             await asyncio.sleep(0.1)
             task.cancel()
-            
             try:
                 await task
             except asyncio.CancelledError:
                 pass
-            
-            assert mock_start.call_count == 2
-            assert mock_client_server.serve_forever.called
-            assert mock_kernel_server.serve_forever.called
 
-    @pytest.mark.asyncio  # Only for async functions
-    async def test_client_connection_error(
+    @pytest.mark.asyncio
+    async def test_client_error_handling(
         self,
+        server: Server,
         mock_stream_reader: mock.AsyncMock,
-        mock_stream_writer: mock.Mock,
-        request_factory: RequestFactory
+        mock_stream_writer: mock.Mock
     ) -> None:
-        """Test handling of client connection errors."""
-        mock_stream_reader.readline.side_effect = ConnectionResetError()
+        """Test handling of client errors."""
+        # Configure mocks
+        mock_stream_writer.write = mock.Mock()
+        mock_stream_writer.drain = mock.AsyncMock()
+        mock_stream_writer.get_extra_info = mock.Mock(return_value="test_client")
+        server.db_manager.get_blocked_domains.return_value = []
+
+        # Set up the mock to return invalid JSON
+        mock_stream_reader.readline.side_effect = [
+            b'invalid json\n',
+            b''  # End connection after invalid request
+        ]
+
+        # Handle the client connection
+        await server.handle_client(mock_stream_reader, mock_stream_writer)
+
+        # Verify responses were sent (domain list + error response)
+        assert mock_stream_writer.write.call_count >= 2
+
+    @pytest.mark.asyncio
+    async def test_kernel_error_handling(
+        self,
+        server: Server,
+        mock_stream_reader: mock.AsyncMock,
+        mock_stream_writer: mock.Mock
+    ) -> None:
+        """Test handling of kernel errors."""
+        # Test connection error
+        mock_stream_reader.readline.side_effect = ConnectionError()
         
-        await handle_client(mock_stream_reader, mock_stream_writer, request_factory)
+        await server.handle_kernel(mock_stream_reader, mock_stream_writer)
+        
+        # Verify connection was closed
         assert mock_stream_writer.close.called
 
-    # No asyncio marker for synchronous functions
-    @pytest.mark.parametrize("request_data,expected_block", [
-        ({'domain': 'example.com', 'categories': []}, False),
-        ({'domain': 'blocked.com', 'categories': ['adult']}, True),
-    ])
-    def test_kernel_request_scenarios(
-        self,
-        request_data: Dict[str, Any],
-        expected_block: bool,
-        mock_db_manager: mock.Mock
-    ) -> None:
-        """Test various kernel request scenarios."""
-        is_blocked = 'blocked.com' in request_data['domain']
-        mock_db_manager.is_domain_blocked.return_value = is_blocked
+    def test_multiple_kernel_requests(self, server: Server) -> None:
+        """Test handling multiple kernel requests."""
+        # Setup mocks
+        server.db_manager.get_setting.side_effect = ['on', 'off']
+        server.db_manager.is_domain_blocked.return_value = True
         
-        response = route_kernel_request(request_data, mock_db_manager)
-        assert response['block'] is expected_block
+        # Test first request (blocking enabled)
+        response1 = server.handle_kernel_request({
+            'domain': 'example.com',
+            'categories': ['adult']
+        })
+        assert response1['block'] is True

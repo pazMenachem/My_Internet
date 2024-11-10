@@ -1,9 +1,8 @@
-import requests
 from abc import ABC, abstractmethod
 from typing import Dict, Any
 from .db_manager import DatabaseManager
-from .config import EASYLIST_URL
 from .response_codes import Codes, RESPONSE_MESSAGES
+from .easylist_manager import EasyListManager
 
 class RequestHandler(ABC):
     @abstractmethod
@@ -12,28 +11,13 @@ class RequestHandler(ABC):
 
 class AdBlockHandler(RequestHandler):
     def __init__(self, db_manager: DatabaseManager):
+        """Initialize AdBlockHandler with database manager and EasyList manager."""
         self.db_manager = db_manager
-        self.load_easylist()
-
-    def load_easylist(self) -> None:
-        """Load and parse easylist."""
-        try:
-            response = requests.get(EASYLIST_URL)
-            response.raise_for_status()
-            easylist_data = response.text
-            
-            # Parse and store valid entries
-            entries = []
-            for line in easylist_data.split("\n"):
-                line = line.strip()
-                if line and not line.startswith("!"):
-                    entries.append((line,))
-                    
-            self.db_manager.clear_easylist()
-            self.db_manager.store_easylist_entries(entries)
-            
-        except requests.exceptions.RequestException as e:
-            print(f"Error loading EasyList: {e}")
+        self.easylist_manager = EasyListManager(db_manager)
+        # Start the automatic update scheduler
+        self.easylist_manager.start_update_scheduler()
+        # Perform initial load
+        self.easylist_manager.force_update()
 
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
         """Handle ad block requests."""
@@ -42,6 +26,11 @@ class AdBlockHandler(RequestHandler):
                 # Handle toggle request
                 state = request_data['action']  # 'on' or 'off'
                 self.db_manager.update_setting('ad_block', state)
+                
+                # If turning on, ensure EasyList is loaded
+                if state == 'on':
+                    self.easylist_manager.force_update()
+                
                 return {
                     'code': Codes.CODE_AD_BLOCK,
                     'message': RESPONSE_MESSAGES['success']
@@ -71,6 +60,11 @@ class AdBlockHandler(RequestHandler):
         if self.db_manager.get_setting('ad_block') == 'off':
             return False
         return self.db_manager.is_easylist_blocked(domain)
+
+    def __del__(self) -> None:
+        """Cleanup when handler is destroyed."""
+        if hasattr(self, 'easylist_manager'):
+            self.easylist_manager.stop_update_scheduler()
 
 class AdultContentBlockHandler(RequestHandler):
     def __init__(self, db_manager: DatabaseManager):
@@ -153,6 +147,25 @@ class DomainBlockHandler(RequestHandler):
                 'message': str(e)
             }
 
+class DomainListHandler(RequestHandler):
+    def __init__(self, db_manager: DatabaseManager):
+        self.db_manager = db_manager
+
+    def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Handle domain list requests."""
+        try:
+            domains = self.db_manager.get_blocked_domains()
+            return {
+                'code': Codes.CODE_DOMAIN_LIST_UPDATE,
+                'domains': domains,
+                'message': RESPONSE_MESSAGES['success']
+            }
+        except Exception as e:
+            return {
+                'code': Codes.CODE_DOMAIN_LIST_UPDATE,
+                'message': str(e)
+            }
+
 class RequestFactory:
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
@@ -160,7 +173,8 @@ class RequestFactory:
             Codes.CODE_AD_BLOCK: lambda: AdBlockHandler(self.db_manager),
             Codes.CODE_ADULT_BLOCK: lambda: AdultContentBlockHandler(self.db_manager),
             Codes.CODE_ADD_DOMAIN: lambda: DomainBlockHandler(self.db_manager),
-            Codes.CODE_REMOVE_DOMAIN: lambda: DomainBlockHandler(self.db_manager)
+            Codes.CODE_REMOVE_DOMAIN: lambda: DomainBlockHandler(self.db_manager),
+            Codes.CODE_DOMAIN_LIST_UPDATE: lambda: DomainListHandler(self.db_manager)
         }
 
     def create_request_handler(self, request_type: str) -> RequestHandler:
