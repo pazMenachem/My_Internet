@@ -41,11 +41,13 @@ class Server:
                         request_data = json.loads(data.decode())
                         response = self.request_factory.handle_request(request_data)
                         conn.send(json.dumps(response).encode() + b'\n')
+
                     except json.JSONDecodeError:
                         conn.send(json.dumps({
                             'status': 'error',
                             'message': 'Invalid JSON format'
                         }).encode() + b'\n')
+
                     except Exception as e:
                         conn.send(json.dumps({
                             'status': 'error',
