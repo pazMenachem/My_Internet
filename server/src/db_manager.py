@@ -15,7 +15,6 @@ class DatabaseManager:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             
-            # Create settings table
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS settings (
                     key TEXT PRIMARY KEY,
@@ -23,14 +22,12 @@ class DatabaseManager:
                 )
             """)
             
-            # Create blocked_domains table - simplified without timestamp
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS blocked_domains (
                     domain TEXT PRIMARY KEY
                 )
             """)
             
-            # Initialize settings if not exists
             cursor.execute("""
                 INSERT OR IGNORE INTO settings (key, value) 
                 VALUES 
@@ -45,7 +42,9 @@ class DatabaseManager:
         """Get setting value."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT value FROM settings WHERE key = ?", (setting,))
+            cursor.execute("""SELECT value 
+                              FROM settings 
+                              WHERE key = ?""", (setting,))
             result = cursor.fetchone()
             value = result[0] if result else 'off'
             self.logger.debug(f"Retrieved setting {setting}: {value}")
@@ -68,7 +67,8 @@ class DatabaseManager:
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
             try:
-                cursor.execute("INSERT INTO blocked_domains (domain) VALUES (?)", (domain,))
+                cursor.execute("""INSERT INTO blocked_domains (domain) 
+                                  VALUES (?)""", (domain,))
                 conn.commit()
                 self.logger.info(f"Domain {domain} added to block list")
             except sqlite3.IntegrityError:
@@ -78,20 +78,21 @@ class DatabaseManager:
         """Remove a domain from blocked list."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute("DELETE FROM blocked_domains WHERE domain = ?", (domain,))
+            cursor.execute("""DELETE FROM blocked_domains 
+                              WHERE domain = ?""", (domain,))
             conn.commit()
-            success = cursor.rowcount > 0
-            if success:
+            if cursor.rowcount:
                 self.logger.info(f"Domain {domain} removed from block list")
             else:
                 self.logger.warning(f"Domain {domain} not found in block list")
-            return success
+            return bool(cursor.rowcount)
 
     def get_blocked_domains(self) -> List[str]:
         """Get list of all blocked domains."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT domain FROM blocked_domains")
+            cursor.execute("""SELECT domain 
+                              FROM blocked_domains""")
             domains = [row[0] for row in cursor.fetchall()]
             self.logger.debug(f"Retrieved {len(domains)} blocked domains")
             return domains
@@ -100,7 +101,9 @@ class DatabaseManager:
         """Check if domain is in blocked list."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()
-            cursor.execute("SELECT 1 FROM blocked_domains WHERE domain = ?", (domain,))
+            cursor.execute("""SELECT 1 
+                              FROM blocked_domains 
+                              WHERE domain = ?""", (domain,))
             is_blocked = cursor.fetchone() is not None
             self.logger.debug(f"Domain {domain} blocked status: {is_blocked}")
             return is_blocked

@@ -55,18 +55,21 @@ class Server:
                                     response = self.request_factory.handle_request(request_data)
                                     conn.send(json.dumps(response).encode() + b'\n')
                                     self.logger.debug(f"Sent response: {response}")
+
                                 except json.JSONDecodeError:
                                     self.logger.error("Invalid JSON format received")
                                     conn.send(json.dumps({
                                         'status': 'error',
                                         'message': 'Invalid JSON format'
                                     }).encode() + b'\n')
+
                                 except Exception as e:
                                     self.logger.error(f"Error handling request: {e}")
                                     conn.send(json.dumps({
                                         'status': 'error',
                                         'message': str(e)
                                     }).encode() + b'\n')
+
                             except socket.timeout:
                                 if not self.running:
                                     break

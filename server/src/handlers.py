@@ -14,8 +14,7 @@ class AdBlockHandler(RequestHandler):
         """Handle ad block requests."""
         try:
             if 'action' in request_data:
-                # Handle toggle request
-                state = request_data['action']  # 'on' or 'off'
+                state = request_data['action']
                 self.db_manager.update_setting('ad_block', state)
                 self.logger.info(f"Ad blocking turned {state}")
                 return {
@@ -40,8 +39,7 @@ class AdultContentBlockHandler(RequestHandler):
         """Handle adult content block requests."""
         try:
             if 'action' in request_data:
-                # Handle toggle request
-                state = request_data['action']  # 'on' or 'off'
+                state = request_data['action']
                 self.db_manager.update_setting('adult_block', state)
                 self.logger.info(f"Adult content blocking turned {state}")
                 return {
@@ -77,31 +75,34 @@ class DomainBlockHandler(RequestHandler):
 
             if action == 'block':
                 self.db_manager.add_blocked_domain(domain)
+
                 self.logger.info(f"Domain blocked: {domain}")
+
                 return {
                     'code': Codes.CODE_ADD_DOMAIN,
                     'message': RESPONSE_MESSAGES['domain_blocked']
                 }
-            elif action == 'unblock':
+
+            if action == 'unblock':
                 if self.db_manager.remove_blocked_domain(domain):
                     self.logger.info(f"Domain unblocked: {domain}")
                     return {
                         'code': Codes.CODE_REMOVE_DOMAIN,
                         'message': RESPONSE_MESSAGES['success']
                     }
-                else:
-                    self.logger.warning(f"Domain not found for unblocking: {domain}")
-                    return {
-                        'code': Codes.CODE_REMOVE_DOMAIN,
-                        'message': RESPONSE_MESSAGES['domain_not_found']
-                    }
-            else:
-                self.logger.warning(f"Invalid action requested: {action}")
-                return {
-                    'code': Codes.CODE_ADD_DOMAIN,
-                    'message': RESPONSE_MESSAGES['invalid_request']
-                }
 
+                self.logger.warning(f"Domain not found for unblocking: {domain}")
+                return {
+                    'code': Codes.CODE_REMOVE_DOMAIN,
+                    'message': RESPONSE_MESSAGES['domain_not_found']
+                }
+                    
+            self.logger.warning(f"Invalid action requested: {action}")
+            return {
+                'code': Codes.CODE_ADD_DOMAIN,
+                'message': RESPONSE_MESSAGES['invalid_request']
+            }
+            
         except Exception as e:
             self.logger.error(f"Error in domain block handler: {e}")
             return {
@@ -133,11 +134,11 @@ class RequestFactory:
         self.db_manager = db_manager
         self.logger = setup_logger(__name__)
         self.handlers = {
-            Codes.CODE_AD_BLOCK: AdBlockHandler(db_manager),
-            Codes.CODE_ADULT_BLOCK: AdultContentBlockHandler(db_manager),
-            Codes.CODE_ADD_DOMAIN: DomainBlockHandler(db_manager),
-            Codes.CODE_REMOVE_DOMAIN: DomainBlockHandler(db_manager),
-            Codes.CODE_DOMAIN_LIST_UPDATE: DomainListHandler(db_manager)
+            Codes.CODE_AD_BLOCK           : AdBlockHandler(db_manager),
+            Codes.CODE_ADULT_BLOCK        : AdultContentBlockHandler(db_manager),
+            Codes.CODE_ADD_DOMAIN         : DomainBlockHandler(db_manager),
+            Codes.CODE_REMOVE_DOMAIN      : DomainBlockHandler(db_manager),
+            Codes.CODE_DOMAIN_LIST_UPDATE : DomainListHandler(db_manager)
         }
 
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
