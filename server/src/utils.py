@@ -1,6 +1,22 @@
+import os
+from pathlib import Path
 from typing import Dict
 
-# Client Command Codes (exact match with client's codes)
+# Base directories
+BASE_DIR = Path(__file__).parent.parent
+LOG_DIR = os.path.join(BASE_DIR, "logs")
+
+# Network Configuration
+HOST: str = '127.0.0.1'
+CLIENT_PORT: int = 65432
+KERNEL_PORT: int = 65433
+DB_FILE: str = 'my_internet.db'
+
+# Logging configuration
+LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+LOG_DATE_FORMAT = "%Y%m%d_%H%M%S"
+
+# Client Command Codes
 class Codes:
     CODE_AD_BLOCK = "50"
     CODE_ADULT_BLOCK = "51"

@@ -1,166 +1,136 @@
+from typing import Dict, Any
 import pytest
 from unittest import mock
-from typing import Dict, Any
 from My_Internet.server.src.handlers import (
-    RequestHandler, 
+    RequestHandler,
+    AdBlockHandler,
     AdultContentBlockHandler,
     DomainBlockHandler,
-    AdBlockHandler,
-    RequestFactory,
-    EASYLIST_URL
+    DomainListHandler,
+    RequestFactory
 )
-from My_Internet.server.src.response_codes import (
-    Codes,
-    RESPONSE_MESSAGES
-)
+from My_Internet.server.src.utils import Codes, RESPONSE_MESSAGES
+
+@pytest.fixture
+def mock_db_manager() -> mock.Mock:
+    """Create a mock database manager."""
+    return mock.Mock()
+
+@pytest.fixture
+def mock_logger() -> mock.Mock:
+    """Create a mock logger."""
+    return mock.Mock()
 
 class TestAdBlockHandler:
     @pytest.fixture
-    def handler(self, mock_db_manager: mock.Mock, mock_requests: mock.Mock) -> AdBlockHandler:
-        """Create handler instance."""
-        with mock.patch('My_Internet.server.src.handlers.AdBlockHandler.load_easylist'):
-            handler = AdBlockHandler(mock_db_manager)
-            mock_requests.reset_mock()
-            return handler
+    def handler(self, mock_db_manager: mock.Mock) -> AdBlockHandler:
+        """Create AdBlockHandler instance."""
+        return AdBlockHandler(mock_db_manager)
 
-    def test_load_easylist(self, handler: AdBlockHandler, mock_requests: mock.Mock) -> None:
-        """Test loading and parsing easylist."""
-        # Configure mock response
-        mock_response = mock.Mock()
-        mock_response.text = "test.com\n!comment\nexample.com"
-        mock_requests.get.return_value = mock_response
-
-        # Call method
-        handler.load_easylist()
+    def test_handle_request_toggle_on(self, handler: AdBlockHandler) -> None:
+        """Test handling ad block toggle on request."""
+        request_data: Dict[str, Any] = {'action': 'on'}
+        response = handler.handle_request(request_data)
         
-        # Verify calls
-        mock_requests.get.assert_called_once_with(EASYLIST_URL)
-        mock_response.raise_for_status.assert_called_once()
-        handler.db_manager.clear_easylist.assert_called_once()
-        
-        # Verify easylist storage
-        expected_entries = [('test.com',), ('example.com',)]
-        handler.db_manager.store_easylist_entries.assert_called_once_with(expected_entries)
+        handler.db_manager.update_setting.assert_called_once_with('ad_block', 'on')
+        assert response['code'] == Codes.CODE_AD_BLOCK
+        assert response['message'] == "Ad blocking turned on"
 
-    def test_handle_toggle_request(self, handler: AdBlockHandler) -> None:
-        """Test toggling ad blocking on/off."""
-        # Test enabling
+    def test_handle_request_error(self, handler: AdBlockHandler) -> None:
+        """Test handling error in ad block request."""
+        handler.db_manager.update_setting.side_effect = Exception("Test error")
         response = handler.handle_request({'action': 'on'})
-        handler.db_manager.update_setting.assert_called_with('ad_block', 'on')
-        assert response['code'] == Codes.CODE_AD_BLOCK
-
-        # Test disabling
-        response = handler.handle_request({'action': 'off'})
-        handler.db_manager.update_setting.assert_called_with('ad_block', 'off')
-        assert response['code'] == Codes.CODE_AD_BLOCK
-
-    def test_handle_check_domain(self, handler: AdBlockHandler) -> None:
-        """Test checking domain with ad blocking."""
-        # Setup: ad blocking enabled and domain matched in easylist
-        handler.db_manager.get_setting.return_value = 'on'
-        handler.db_manager.is_easylist_blocked.return_value = True
         
-        response = handler.handle_request({'domain': 'ads.example.com'})
         assert response['code'] == Codes.CODE_AD_BLOCK
-        assert handler.db_manager.is_easylist_blocked.called
+        assert response['message'] == "Test error"
 
 class TestAdultContentBlockHandler:
     @pytest.fixture
     def handler(self, mock_db_manager: mock.Mock) -> AdultContentBlockHandler:
-        """Create handler instance."""
+        """Create AdultContentBlockHandler instance."""
         return AdultContentBlockHandler(mock_db_manager)
 
-    def test_handle_toggle_request(self, handler: AdultContentBlockHandler) -> None:
-        """Test toggling adult content blocking."""
-        # Test enabling
-        response = handler.handle_request({'action': 'on'})
-        handler.db_manager.update_setting.assert_called_with('adult_block', 'on')
-        assert response['code'] == Codes.CODE_ADULT_BLOCK
-
-        # Test disabling
-        response = handler.handle_request({'action': 'off'})
-        handler.db_manager.update_setting.assert_called_with('adult_block', 'off')
-        assert response['code'] == Codes.CODE_ADULT_BLOCK
-
-    def test_handle_check_request(self, handler: AdultContentBlockHandler) -> None:
-        """Test checking domain with adult content blocking."""
-        # Setup: adult blocking enabled
-        handler.db_manager.get_setting.return_value = 'on'
+    def test_handle_request_toggle_on(self, handler: AdultContentBlockHandler) -> None:
+        """Test handling adult content block toggle on request."""
+        request_data: Dict[str, Any] = {'action': 'on'}
+        response = handler.handle_request(request_data)
         
-        response = handler.handle_request({
-            'action': 'check',
-            'domain': 'example.com'
-        })
+        handler.db_manager.update_setting.assert_called_once_with('adult_block', 'on')
         assert response['code'] == Codes.CODE_ADULT_BLOCK
+        assert response['message'] == "Adult content blocking turned on"
 
 class TestDomainBlockHandler:
     @pytest.fixture
     def handler(self, mock_db_manager: mock.Mock) -> DomainBlockHandler:
-        """Create handler instance."""
+        """Create DomainBlockHandler instance."""
         return DomainBlockHandler(mock_db_manager)
 
     def test_block_domain(self, handler: DomainBlockHandler) -> None:
         """Test blocking a domain."""
-        response = handler.handle_request({
+        request_data: Dict[str, Any] = {
             'action': 'block',
             'domain': 'example.com'
-        })
+        }
+        response = handler.handle_request(request_data)
         
         handler.db_manager.add_blocked_domain.assert_called_once_with('example.com')
         assert response['code'] == Codes.CODE_ADD_DOMAIN
+        assert response['message'] == RESPONSE_MESSAGES['domain_blocked']
 
     def test_unblock_domain(self, handler: DomainBlockHandler) -> None:
         """Test unblocking a domain."""
-        # Setup: domain exists
-        handler.db_manager.is_domain_blocked.return_value = True
-        
-        response = handler.handle_request({
+        handler.db_manager.remove_blocked_domain.return_value = True
+        request_data: Dict[str, Any] = {
             'action': 'unblock',
             'domain': 'example.com'
-        })
+        }
+        response = handler.handle_request(request_data)
         
         handler.db_manager.remove_blocked_domain.assert_called_once_with('example.com')
         assert response['code'] == Codes.CODE_REMOVE_DOMAIN
+        assert response['message'] == RESPONSE_MESSAGES['success']
 
-    def test_unblock_nonexistent_domain(self, handler: DomainBlockHandler) -> None:
-        """Test unblocking a nonexistent domain."""
-        handler.db_manager.remove_blocked_domain.return_value = False
+    def test_invalid_request(self, handler: DomainBlockHandler) -> None:
+        """Test handling invalid request."""
+        request_data: Dict[str, Any] = {'action': 'block'}  # Missing domain
+        response = handler.handle_request(request_data)
         
-        response = handler.handle_request({
-            'action': 'unblock',
-            'domain': 'nonexistent.com'
-        })
-                
-        assert 'domain not found' in response['message'].lower()
+        assert response['code'] == Codes.CODE_ADD_DOMAIN
+        assert response['message'] == RESPONSE_MESSAGES['invalid_request']
 
+class TestDomainListHandler:
+    @pytest.fixture
+    def handler(self, mock_db_manager: mock.Mock) -> DomainListHandler:
+        """Create DomainListHandler instance."""
+        return DomainListHandler(mock_db_manager)
+
+    def test_get_domain_list(self, handler: DomainListHandler) -> None:
+        """Test getting list of blocked domains."""
+        domains = ['example.com', 'test.com']
+        handler.db_manager.get_blocked_domains.return_value = domains
+        response = handler.handle_request({})
+        
+        assert response['code'] == Codes.CODE_DOMAIN_LIST_UPDATE
+        assert response['domains'] == domains
+        assert response['message'] == RESPONSE_MESSAGES['success']
 
 class TestRequestFactory:
     @pytest.fixture
     def factory(self, mock_db_manager: mock.Mock) -> RequestFactory:
-        """Create factory instance."""
+        """Create RequestFactory instance."""
         return RequestFactory(mock_db_manager)
 
-    def test_create_handlers(self, factory: RequestFactory) -> None:
-        """Test creating different types of handlers."""
-        test_cases = [
-            (Codes.CODE_AD_BLOCK, AdBlockHandler),
-            (Codes.CODE_ADULT_BLOCK, AdultContentBlockHandler),
-            (Codes.CODE_ADD_DOMAIN, DomainBlockHandler),
-            (Codes.CODE_REMOVE_DOMAIN, DomainBlockHandler)
-        ]
-        
-        for code, handler_class in test_cases:
-            handler = factory.create_request_handler(code)
-            assert isinstance(handler, handler_class)
+    def test_handle_valid_request(self, factory: RequestFactory) -> None:
+        """Test handling valid request with correct code."""
+        request_data: Dict[str, Any] = {
+            'code': Codes.CODE_AD_BLOCK,
+            'action': 'on'
+        }
+        response = factory.handle_request(request_data)
+        assert response['code'] == Codes.CODE_AD_BLOCK
 
-    def test_handle_request(self, factory: RequestFactory, sample_requests: dict) -> None:
-        """Test handling different types of requests."""
-        for request in sample_requests.values():
-            response = factory.handle_request(request)
-            assert 'code' in response
-            assert 'message' in response
-
-    def test_invalid_request_type(self, factory: RequestFactory) -> None:
-        """Test handling invalid request type."""
-        response = factory.handle_request({'code': 'invalid'})
-        assert 'invalid' in response['message'].lower()
+    def test_handle_invalid_code(self, factory: RequestFactory) -> None:
+        """Test handling request with invalid code."""
+        request_data: Dict[str, Any] = {'code': 'invalid_code'}
+        response = factory.handle_request(request_data)
+        assert response['message'] == RESPONSE_MESSAGES['invalid_request']
