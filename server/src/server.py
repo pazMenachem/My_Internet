@@ -6,7 +6,7 @@ import asyncio
 from .utils import (
     CLIENT_PORT, DEFAULT_ADDRESS, KERNEL_PORT,
     STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE, STR_DOMAINS, STR_CONTENT,
-    STR_TOGGLE_ON, STR_TOGGLE_OFF, STR_DOMAIN,
+    STR_TOGGLE_ON, STR_TOGGLE_OFF, STR_DOMAIN, 
     Codes, invalid_json_response
 )
 from .db_manager import DatabaseManager
@@ -39,12 +39,10 @@ class Server:
                     conn.settimeout(1.0)
                     
                     try:
-                        domains = self.db_manager.get_blocked_domains()
-                        conn.send(json.dumps({
-                            STR_CODE: Codes.CODE_DOMAIN_LIST_UPDATE,
-                            STR_DOMAINS: domains
-                        }).encode() + b'\n')
-                        self.logger.debug(f"Sent initial domain list: {domains}")
+                        # Send initial settings
+                        initial_settings = self._get_initial_settings()
+                        conn.send(json.dumps(initial_settings).encode() + b'\n')
+                        self.logger.debug(f"Sent initial settings: {initial_settings}")
 
                         while True:
                             try:
@@ -63,13 +61,6 @@ class Server:
                                 except json.JSONDecodeError:
                                     self.logger.error("Invalid JSON format received")
                                     conn.send(json.dumps(invalid_json_response()).encode() + b'\n')
-
-                                except Exception as e:
-                                    self.logger.error(f"Error handling request: {e}")
-                                    conn.send(json.dumps({
-                                        STR_CODE: Codes.CODE_ERROR,
-                                        STR_CONTENT: str(e)
-                                    }).encode() + b'\n')
 
                             except socket.timeout:
                                 if not self.running:
@@ -179,6 +170,24 @@ class Server:
                 await kernel_server.wait_closed()
             if client_thread and client_thread.is_alive():
                 client_thread.join(timeout=1.0)
+
+    def _get_initial_settings(self) -> Dict[str, Any]:
+        """Get initial settings and domain list for client initialization."""
+        try:
+            domains = self.db_manager.get_blocked_domains()
+            settings = {
+                STR_AD_BLOCK: self.db_manager.get_setting(STR_AD_BLOCK),
+                STR_ADULT_BLOCK: self.db_manager.get_setting(STR_ADULT_BLOCK)
+            }
+            
+            return {
+                STR_CODE: Codes.CODE_INIT_SETTINGS,
+                STR_DOMAINS: domains,
+                Codes.CODE_INIT_SETTINGS: settings
+            }
+        except Exception as e:
+            self.logger.error(f"Error getting initial settings: {e}")
+            return invalid_json_response()
 
 def initialize_server(db_file: str) -> None:
     """Initialize and run the server."""

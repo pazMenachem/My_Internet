@@ -25,7 +25,7 @@ class Codes:
     CODE_SUCCESS            = "100"
     CODE_ERROR              = "101"
     CODE_ACK                = "99"
-
+    CODE_INIT_SETTINGS      = "55"
 # Logging constants
 LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 LOG_DATE_FORMAT = "%Y%m%d_%H%M%S"
