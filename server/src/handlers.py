@@ -77,9 +77,16 @@ class DomainBlockHandler(RequestHandler):
             
             match operation_code:
                 case Codes.CODE_ADD_DOMAIN:
+                    if self.db_manager.is_domain_blocked(domain):
+                        self.logger.warning(f"Domain already blocked: {domain}")
+                        return {
+                            STR_CODE: Codes.CODE_ERROR,
+                            STR_CONTENT: f"Domain {domain} is already blocked",
+                            STR_OPERATION: Codes.CODE_ADD_DOMAIN
+                        }
+                    
                     self.db_manager.add_blocked_domain(domain)
                     self.logger.info(f"Domain blocked: {domain}")
-                    
                     return {
                         STR_CODE: Codes.CODE_SUCCESS,
                         STR_CONTENT: domain,
@@ -89,7 +96,6 @@ class DomainBlockHandler(RequestHandler):
                 case Codes.CODE_REMOVE_DOMAIN:
                     if self.db_manager.remove_blocked_domain(domain):
                         self.logger.info(f"Domain unblocked: {domain}")
-
                         return {
                             STR_CODE: Codes.CODE_SUCCESS,
                             STR_CONTENT: domain,
