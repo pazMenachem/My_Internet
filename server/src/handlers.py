@@ -3,9 +3,9 @@ from .db_manager import DatabaseManager
 from .utils import (
     Codes,
     STR_AD_BLOCK, STR_ADULT_BLOCK,
-    STR_CODE, STR_CONTENT, STR_DOMAINS, STR_DOMAIN,
+    STR_CODE, STR_CONTENT, STR_DOMAINS,
     STR_DOMAIN_BLOCKED_MSG, STR_DOMAIN_NOT_FOUND_MSG,
-    STR_BLOCK, STR_UNBLOCK, STR_DOMAIN_UNBLOCKED_MSG, 
+    STR_DOMAIN_UNBLOCKED_MSG, STR_OPERATION,
     invalid_json_response
 )
 from .logger import setup_logger
@@ -26,7 +26,8 @@ class AdBlockHandler(RequestHandler):
                 self.logger.info(f"Ad blocking turned {state}")
                 return {
                     STR_CODE: Codes.CODE_SUCCESS,
-                    STR_CONTENT: f"Ad blocking turned {state}"
+                    STR_CONTENT: f"Ad blocking turned {state}",
+                    STR_OPERATION: Codes.CODE_AD_BLOCK
                 }
                 
             return invalid_json_response()
@@ -35,7 +36,8 @@ class AdBlockHandler(RequestHandler):
             self.logger.error(f"Error in ad block handler: {e}")
             return {
                 STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e)
+                STR_CONTENT: str(e),
+                STR_OPERATION: Codes.CODE_AD_BLOCK
             }
 
 class AdultContentBlockHandler(RequestHandler):
@@ -48,7 +50,8 @@ class AdultContentBlockHandler(RequestHandler):
                 self.logger.info(f"Adult content blocking turned {state}")
                 return {
                     STR_CODE: Codes.CODE_SUCCESS,
-                    STR_CONTENT: f"Adult content blocking turned {state}"
+                    STR_CONTENT: f"Adult content blocking turned {state}",
+                    STR_OPERATION: Codes.CODE_ADULT_BLOCK
                 }
                 
             return invalid_json_response()
@@ -57,7 +60,8 @@ class AdultContentBlockHandler(RequestHandler):
             self.logger.error(f"Error in adult content block handler: {e}")
             return {
                 STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e)
+                STR_CONTENT: str(e),
+                STR_OPERATION: Codes.CODE_ADULT_BLOCK
             }
 
 class DomainBlockHandler(RequestHandler):
@@ -68,14 +72,16 @@ class DomainBlockHandler(RequestHandler):
                 self.logger.warning("Invalid request format: missing content")
                 return invalid_json_response()
 
-            match request_data[STR_CODE]:
+            operation_code = request_data[STR_CODE]
+            match operation_code:
                 case Codes.CODE_ADD_DOMAIN:
                     self.db_manager.add_blocked_domain(request_data[STR_CONTENT])
                     self.logger.info(f"Domain blocked: {request_data[STR_CONTENT]}")
                     
                     return {
                         STR_CODE: Codes.CODE_SUCCESS,
-                        STR_CONTENT: STR_DOMAIN_BLOCKED_MSG
+                        STR_CONTENT: STR_DOMAIN_BLOCKED_MSG,
+                        STR_OPERATION: Codes.CODE_ADD_DOMAIN
                     }
 
                 case Codes.CODE_REMOVE_DOMAIN:
@@ -84,23 +90,26 @@ class DomainBlockHandler(RequestHandler):
 
                         return {
                             STR_CODE: Codes.CODE_SUCCESS,
-                            STR_CONTENT: STR_DOMAIN_UNBLOCKED_MSG
+                            STR_CONTENT: STR_DOMAIN_UNBLOCKED_MSG,
+                            STR_OPERATION: Codes.CODE_REMOVE_DOMAIN
                         }
 
                     self.logger.warning(f"Domain not found for unblocking: {request_data[STR_CONTENT]}")
                     return {
                         STR_CODE: Codes.CODE_ERROR,
-                        STR_CONTENT: STR_DOMAIN_NOT_FOUND_MSG
+                        STR_CONTENT: STR_DOMAIN_NOT_FOUND_MSG,
+                        STR_OPERATION: Codes.CODE_REMOVE_DOMAIN
                     }
                     
             self.logger.warning(f"Invalid action requested: {request_data[STR_CODE]}")
             return invalid_json_response()
-            
+
         except Exception as e:
             self.logger.error(f"Error in domain block handler: {e}")
             return {
-                STR_CODE: Codes.CODE_ADD_DOMAIN,
-                STR_CONTENT: str(e)
+                STR_CODE: Codes.CODE_ERROR,
+                STR_CONTENT: str(e),
+                STR_OPERATION: operation_code
             }
 
 class DomainListHandler(RequestHandler):
@@ -111,14 +120,16 @@ class DomainListHandler(RequestHandler):
             self.logger.info(f"Domain list requested, returned {len(domains)} domains")
             return {
                 STR_CODE: Codes.CODE_SUCCESS,
-                STR_DOMAINS: domains
+                STR_DOMAINS: domains,
+                STR_OPERATION: Codes.CODE_DOMAIN_LIST_UPDATE
             }
 
         except Exception as e:
             self.logger.error(f"Error in domain list handler: {e}")
             return {
                 STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e)
+                STR_CONTENT: str(e),
+                STR_OPERATION: Codes.CODE_DOMAIN_LIST_UPDATE
             }
 
 class RequestFactory:

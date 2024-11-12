@@ -33,6 +33,7 @@ LOG_DATE_FORMAT = "%Y%m%d_%H%M%S"
 # Message Types and Codes
 STR_CODE = "code"
 STR_CONTENT = "content"
+STR_OPERATION = "operation"
 # STR_TYPE = "type"
 # STR_ACTION = "action"
 # STR_MESSAGE_ID = "message_id"

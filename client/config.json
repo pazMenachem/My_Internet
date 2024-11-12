@@ -7,11 +7,14 @@
     "blocked_domains": {
         "example.com": true,
         "ads.example.com": true,
-        "fxp.co.il": true
+        "fxp.co.il": true,
+        "test.com": true,
+        "e.com": true,
+        "fxp.com": true
     },
     "settings": {
-        "ad_block": "off",
-        "adult_block": "off"
+        "ad_block": "on",
+        "adult_block": "on"
     },
     "logging": {
         "level": "INFO",
