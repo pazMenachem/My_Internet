@@ -6,7 +6,7 @@ from .Logger import setup_logger
 from .ConfigManager import ConfigManager
 
 from .utils import (
-    STR_CODE, STR_DOMAINS, STR_CONTENT,
+    STR_DOMAINS, STR_OPERATION,
     Codes
 )
 
@@ -26,7 +26,6 @@ class Application:
         """Initialize application components."""
         self._logger = setup_logger(__name__)
         self._config_manager = ConfigManager()
-        self._request_lock = threading.Lock()
         
         self._view = Viewer(config_manager=self._config_manager, message_callback=self._handle_request)
         self._communicator = Communicator(config_manager=self._config_manager, message_callback=self._handle_request)
@@ -74,7 +73,7 @@ class Application:
             self._logger.error(f"Failed to start GUI: {str(e)}")
             raise
 
-    def _handle_request(self, request: str) -> None:
+    def _handle_request(self, request: str, server: bool = True) -> None:
         """
         Handle outgoing messages from the UI and Server.
         
@@ -85,22 +84,25 @@ class Application:
             self._logger.info(f"Processing request: {request}")
             request_dict = json.loads(request)
             
-            with self._request_lock:
-                match request_dict[STR_CODE]:
-                    ## Codes sent to server
-                    case Codes.CODE_AD_BLOCK      | \
-                         Codes.CODE_ADULT_BLOCK   | \
-                         Codes.CODE_ADD_DOMAIN    | \
-                         Codes.CODE_REMOVE_DOMAIN:
-                        self._communicator.send_message(request_dict)
-                    ## Codes received from server
-                    case Codes.CODE_DOMAIN_LIST_UPDATE:
-                        self._view.update_domain_list(request_dict[STR_DOMAINS])
-                    case Codes.CODE_ERROR:
-                        self._view._show_error(request_dict[STR_CONTENT])
-                    case Codes.CODE_SUCCESS:
-                        self._view._show_success(request_dict[STR_CONTENT])
-
+            if server:
+                message = request if isinstance(request, dict) else json.loads(request)
+                self._communicator.send_message(message)
+                return
+            
+            match request_dict[STR_OPERATION]:
+                case Codes.CODE_INIT_SETTINGS:
+                    self._view.update_initial_settings(request_dict)
+                case Codes.CODE_AD_BLOCK:
+                    self._view.ad_block_response(request_dict)
+                case Codes.CODE_ADULT_BLOCK:
+                    self._view.adult_block_response(request_dict)
+                case Codes.CODE_ADD_DOMAIN:
+                    self._view.add_domain_response(request_dict)
+                case Codes.CODE_REMOVE_DOMAIN:
+                    self._view.remove_domain_response(request_dict)
+                case Codes.CODE_DOMAIN_LIST_UPDATE:
+                    self._view.update_domain_list_response(request_dict[STR_DOMAINS])
+                        
         except json.JSONDecodeError as e:
             self._logger.error(f"Invalid JSON format: {str(e)}")
             raise

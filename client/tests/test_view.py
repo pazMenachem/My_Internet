@@ -86,7 +86,7 @@ def test_handle_ad_block(viewer: Viewer) -> None:
     """Test handling ad block setting changes."""
     # Configure the mock StringVar to return "on"
     viewer.ad_var.get.return_value = "on"
-    viewer._handle_ad_block()
+    viewer._handle_ad_block_request()
     
     expected_json = json.dumps({
         STR_CODE: Codes.CODE_AD_BLOCK,
@@ -101,7 +101,7 @@ def test_handle_adult_block(viewer: Viewer) -> None:
     """Test handling adult block setting changes."""
     # Configure the mock StringVar to return "on"
     viewer.adult_var.get.return_value = "on"
-    viewer._handle_adult_block()
+    viewer._handle_adult_block_request()
     
     expected_json = json.dumps({
         STR_CODE: Codes.CODE_ADULT_BLOCK,
@@ -116,7 +116,7 @@ def test_add_domain(viewer: Viewer) -> None:
     """Test adding a domain."""
     domain = "test.com"
     viewer.domain_entry.get.return_value = domain
-    viewer._add_domain()
+    viewer._add_domain_request()
     
     expected_json = json.dumps({
         STR_CODE: Codes.CODE_ADD_DOMAIN,
@@ -133,7 +133,7 @@ def test_add_duplicate_domain(viewer: Viewer) -> None:
     viewer.config[STR_BLOCKED_DOMAINS][domain] = True
     viewer.domain_entry.get.return_value = domain
     
-    viewer._add_domain()
+    viewer._add_domain_request()
     
     viewer._message_callback.assert_not_called()
     viewer._show_error.assert_called_once_with(ERR_DUPLICATE_DOMAIN)
@@ -146,7 +146,7 @@ def test_remove_domain(viewer: Viewer) -> None:
     viewer.domains_listbox.curselection.return_value = (0,)
     viewer.domains_listbox.get.return_value = domain
     
-    viewer._remove_domain()
+    viewer._remove_domain_request()
     
     expected_json = json.dumps({
         STR_CODE: Codes.CODE_REMOVE_DOMAIN,

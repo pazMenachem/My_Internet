@@ -75,7 +75,7 @@ class DomainBlockHandler(RequestHandler):
                     
                     return {
                         STR_CODE: Codes.CODE_SUCCESS,
-                        STR_CONTENT: STR_DOMAIN_BLOCKED_MSG
+                        STR_CONTENT: STR_DOMAIN_BLOCKED_MSG,
                     }
 
                 case Codes.CODE_REMOVE_DOMAIN:

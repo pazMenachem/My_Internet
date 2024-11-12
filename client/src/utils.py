@@ -19,6 +19,7 @@ class Codes:
     CODE_ADD_DOMAIN         = "52"
     CODE_REMOVE_DOMAIN      = "53"
     CODE_DOMAIN_LIST_UPDATE = "54"
+    CODE_INIT_SETTINGS      = "55"
     CODE_SUCCESS            = "100"
     CODE_ERROR              = "101"
 
@@ -42,6 +43,15 @@ STR_CONTENT           = "content"
 STR_ERROR             = "Error"
 STR_DOMAINS           = "domains"
 STR_SUCCESS           = "Success"
+STR_OPERATION         = "operation"
+
+# Operation constants
+STR_REMOVE_DOMAIN_REQUEST = "Remove domain request"
+STR_ADD_DOMAIN_REQUEST = "Add domain request"
+STR_AD_BLOCK_RESPONSE = "Ad block response"
+STR_ADD_DOMAIN_RESPONSE = "Add domain response"
+STR_ADULT_BLOCK_RESPONSE = "Adult block response"
+STR_REMOVE_DOMAIN_RESPONSE = "Remove domain response"
 
 # Config Constants
 STR_BLOCKED_DOMAINS     = "blocked_domains"
@@ -61,14 +71,6 @@ DEFAULT_CONFIG = {
         STR_PORT: DEFAULT_PORT,
         STR_RECEIVE_BUFFER_SIZE: DEFAULT_BUFFER_SIZE
     },
-    
-    STR_BLOCKED_DOMAINS: {},
-    
-    STR_SETTINGS: {
-        STR_AD_BLOCK: "off",
-        STR_ADULT_BLOCK: "off"
-    },
-    
     STR_LOGGING: {
         STR_LEVEL: "INFO",
         STR_LOG_DIR: LOG_DIR
