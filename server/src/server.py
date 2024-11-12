@@ -6,7 +6,7 @@ import asyncio
 from .utils import (
     CLIENT_PORT, DEFAULT_ADDRESS, KERNEL_PORT,
     STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE, STR_DOMAINS, STR_CONTENT,
-    STR_TOGGLE_ON, STR_TOGGLE_OFF, STR_DOMAIN, 
+    STR_TOGGLE_ON, STR_TOGGLE_OFF, STR_DOMAIN, STR_OPERATION, STR_SETTINGS,
     Codes, invalid_json_response
 )
 from .db_manager import DatabaseManager
@@ -181,9 +181,9 @@ class Server:
             }
             
             return {
-                STR_CODE: Codes.CODE_INIT_SETTINGS,
+                STR_OPERATION: Codes.CODE_INIT_SETTINGS,
                 STR_DOMAINS: domains,
-                Codes.CODE_INIT_SETTINGS: settings
+                STR_SETTINGS: settings
             }
         except Exception as e:
             self.logger.error(f"Error getting initial settings: {e}")

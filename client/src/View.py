@@ -2,18 +2,19 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from typing import Callable, List
 import json
-import threading
 from .Logger import setup_logger
 from .ConfigManager import ConfigManager
 
 from .utils import (
     Codes,
     WINDOW_SIZE, WINDOW_TITLE,
-    ERR_DUPLICATE_DOMAIN, ERR_NO_DOMAIN_SELECTED, ERR_DOMAIN_LIST_UPDATE_FAILED,
+    ERR_NO_DOMAIN_SELECTED, ERR_DOMAIN_LIST_UPDATE_FAILED,
     STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE, STR_BLOCKED_DOMAINS,
-    STR_CONTENT, STR_SETTINGS, STR_ERROR, STR_SUCCESS
+    STR_CONTENT, STR_SETTINGS, STR_ERROR, STR_SUCCESS,
+    STR_ADD_DOMAIN_RESPONSE, STR_REMOVE_DOMAIN_REQUEST, STR_ADD_DOMAIN_REQUEST,
+    STR_AD_BLOCK_RESPONSE, STR_ADULT_BLOCK_RESPONSE, STR_REMOVE_DOMAIN_RESPONSE,
+    STR_DOMAINS,
 )
-
 
 class Viewer:
     """
@@ -33,7 +34,6 @@ class Viewer:
         self.config_manager = config_manager
         self.config = config_manager.get_config()
         self._message_callback = message_callback
-        self._update_list_lock = threading.Lock()
 
         # Initialize root window first
         self.root: tk.Tk = tk.Tk()
@@ -82,115 +82,251 @@ class Viewer:
             STR_ADULT_BLOCK: self.adult_var.get()
         }
 
-    def update_domain_list(self, domains: List[str]) -> None:
+    def update_domain_list_response(self, domains: List[str]) -> None:
         """
         Update the domains listbox with a new list of domains from the server.
 
         Args:
             domains: List of domain strings to be displayed in the listbox.
         """
-        with self._update_list_lock:
-            self.logger.info("Updating domain list from server")
+        self.logger.info("Updating domain list from server")
 
+        try:
+            self.domains_listbox.delete(0, tk.END)
+            
+            for domain in domains:
+                self.domains_listbox.insert(tk.END, domain)
+
+        except Exception as e:
+            self.logger.error(f"Error updating domain list: {str(e)}")
+            self._show_error(ERR_DOMAIN_LIST_UPDATE_FAILED)
+            return
+        
+        self.logger.info(f"Updated domain list with {len(domains)} domains")
+        
+    def add_domain_response(self, response: dict) -> None:
+            """
+            Handle the response from the server after attempting to add a domain.
+            
+            Args:
+                response: Dictionary containing the server's response with code and content.
+            """
             try:
-                self.domains_listbox.delete(0, tk.END)
+                match response[STR_CODE]:
+                    case Codes.CODE_SUCCESS:
+                        domain = response[STR_CONTENT]
+                        with self._update_list_lock:
+                            self.domains_listbox.insert(tk.END, domain)
+                            self.domain_entry.delete(0, tk.END)
+                            
+                        self._show_success(
+                            message=f"Domain '{domain}' added successfully",
+                            operation=STR_ADD_DOMAIN_RESPONSE
+                        )
+
+                    case Codes.CODE_ERROR:
+                        self._show_error(
+                            message=response[STR_CONTENT],
+                            operation=STR_ADD_DOMAIN_RESPONSE
+                        )
                 
-                for domain in domains:
-                    self.domains_listbox.insert(tk.END, domain)
-                    
-                self.logger.info(f"Updated domain list with {len(domains)} domains")
-
             except Exception as e:
-                self.logger.error(f"Error updating domain list: {str(e)}")
-                self._show_error(ERR_DOMAIN_LIST_UPDATE_FAILED)
+                self._show_error(
+                    message="An unexpected error occurred",
+                    operation=f"Processing add domain response: {str(e)}"
+                )
 
-    def _add_domain(self) -> None:
+    def ad_block_response(self, response: dict) -> None:
+        """
+        Handle the response from the server after changing ad block setting.
+        
+        Args:
+            response: Dictionary containing the server's response with code and content.
+        """
+        prev_state = "off" if self.ad_var.get() == "on" else "on"
+        
+        try:
+            match response[STR_CODE]:
+                case Codes.CODE_SUCCESS:
+                    self._show_success(
+                        message=f"Ad blocking turned {self.ad_var.get()}",
+                        operation=STR_AD_BLOCK_RESPONSE
+                    )
+                case Codes.CODE_ERROR:
+                    self.ad_var.set(prev_state)
+                    self._show_error(
+                        message=response[STR_CONTENT],
+                        operation=STR_AD_BLOCK_RESPONSE
+                    )
+        except Exception as e:
+            self.ad_var.set(prev_state)
+            self._show_error(
+                message="An unexpected error occurred",
+                operation=f"Processing ad block response: {str(e)}"
+            )
+
+    def adult_block_response(self, response: dict) -> None:
+        """
+        Handle the response from the server after changing adult block setting.
+        
+        Args:
+            response: Dictionary containing the server's response with code and content.
+        """
+        prev_state = "off" if self.adult_var.get() == "on" else "on"
+        
+        try:
+            match response[STR_CODE]:
+                case Codes.CODE_SUCCESS:
+                    self._show_success(
+                        message=f"Adult content blocking turned {self.adult_var.get()}",
+                        operation=STR_ADULT_BLOCK_RESPONSE
+                    )
+                case Codes.CODE_ERROR:
+                    self.adult_var.set(prev_state)
+                    self._show_error(
+                        message=response[STR_CONTENT],
+                        operation=STR_ADULT_BLOCK_RESPONSE
+                    )
+        except Exception as e:
+            self.adult_var.set(prev_state)
+            self._show_error(
+                message="An unexpected error occurred",
+                operation=f"Processing adult block response: {str(e)}"
+            )
+
+    def remove_domain_response(self, response: dict) -> None:
+        """
+        Handle the response from the server after removing a domain.
+        
+        Args:
+            response: Dictionary containing the server's response with code and content.
+        """
+        try:
+            match response[STR_CODE]:
+                case Codes.CODE_SUCCESS:
+                    domain = response[STR_CONTENT]
+                    self.domains_listbox.delete(self.domains_listbox.curselection())
+                    self._show_success(
+                        message=f"Domain '{domain}' removed successfully",
+                        operation=STR_REMOVE_DOMAIN_RESPONSE
+                    )
+                case Codes.CODE_ERROR:
+                    self._show_error(
+                        message=response[STR_CONTENT],
+                        operation=STR_REMOVE_DOMAIN_RESPONSE
+                    )
+        except Exception as e:
+            self._show_error(
+                message="An unexpected error occurred",
+                operation=f"Processing remove domain response: {str(e)}"
+            )
+
+    def update_initial_settings(self, response: dict) -> None:
+        """
+        Update all initial settings from server response.
+        
+        Args:
+            response: Dictionary containing initial settings:
+                     - domains: List of blocked domains
+                     - settings: Dictionary with ad_block and adult_block states
+        """
+        try:
+            self.root.after(0, lambda: self.update_domain_list_response(response[STR_DOMAINS]))
+            self.root.after(0, lambda: self._update_block_settings(response[STR_SETTINGS]))
+            
+            self.logger.info("Successfully initialized settings from server")
+            
+        except Exception as e:
+            self._show_error(
+                message="Failed to initialize settings",
+                operation=f"Initial settings update: {str(e)}"
+            )
+    
+    def _add_domain_request(self) -> None:
         """Add a domain to the blocked sites list."""
         domain = self.domain_entry.get().strip()
         
         if domain:
-            if domain not in self.config[STR_BLOCKED_DOMAINS]:
-                self.domains_listbox.insert(tk.END, domain)
-                self.domain_entry.delete(0, tk.END)
+            self.logger.debug(f"Sending add domain request for: {domain}")
+            self._message_callback(json.dumps({
+                STR_CODE: Codes.CODE_ADD_DOMAIN,
+                STR_CONTENT: domain
+                }))
+        else:
+            self._show_error(
+                message="Please enter a domain name",
+                operation=STR_ADD_DOMAIN_REQUEST
+            )
 
-                self.config[STR_BLOCKED_DOMAINS][domain] = True
-                self.config_manager.save_config(self.config)
-
-                self._message_callback(json.dumps({
-                    STR_CODE: Codes.CODE_ADD_DOMAIN,
-                    STR_CONTENT: domain
-                    }))
-
-                self.logger.info(f"Domain added: {domain}")
-            else:
-                self.logger.warning(f"Attempted to add duplicate domain: {domain}")
-                self._show_error(ERR_DUPLICATE_DOMAIN)
-                
-    def _remove_domain(self) -> None:
+    def _remove_domain_request(self) -> None:
         """Remove the selected domain from the blocked sites list."""
         selection = self.domains_listbox.curselection()
         
         if selection:
             domain = self.domains_listbox.get(selection)
-            self.domains_listbox.delete(selection)
-            
-            del self.config[STR_BLOCKED_DOMAINS][domain]
-            self.config_manager.save_config(self.config)
-            
+            self.logger.debug(f"Sending remove domain request for: {domain}")
             self._message_callback(json.dumps({
                 STR_CODE: Codes.CODE_REMOVE_DOMAIN,
                 STR_CONTENT: domain
-                }))
-            
-            self.logger.info(f"Domain removed: {domain}")
+            }))
         else:
-            self.logger.warning("Attempted to remove domain without selection")
-            self._show_error(ERR_NO_DOMAIN_SELECTED)
+            self._show_error(
+                message=ERR_NO_DOMAIN_SELECTED,
+                operation=STR_REMOVE_DOMAIN_REQUEST
+            )
 
-    def _handle_ad_block(self) -> None:
+    def _handle_ad_block_request(self) -> None:
         """Handle changes to the ad block setting."""
         state = self.ad_var.get()
-        self.config[STR_SETTINGS][STR_AD_BLOCK] = state
-        self.config_manager.save_config(self.config)
-        
+        self.logger.debug(f"Sending ad block request: {state}")
+
         self._message_callback(json.dumps({
             STR_CODE: Codes.CODE_AD_BLOCK,
             STR_CONTENT: state
-            }))
-        
-        self.logger.info(f"Ad blocking state changed to: {state}")
+        }))
 
-    def _handle_adult_block(self) -> None:
+    def _handle_adult_block_request(self) -> None:
         """Handle changes to the adult sites block setting."""
         state = self.adult_var.get()
-        self.config[STR_SETTINGS][STR_ADULT_BLOCK] = state
-        self.config_manager.save_config(self.config)
-        
+        self.logger.debug(f"Sending adult block request: {state}")
+
         self._message_callback(json.dumps({
             STR_CODE: Codes.CODE_ADULT_BLOCK,
             STR_CONTENT: state
-            }))
-        
-        self.logger.info(f"Adult site blocking state changed to: {state}")
+        }))
 
-    def _show_error(self, message: str) -> None:
+    def _update_block_settings(self, settings: dict) -> None:
+        """Update the block settings radio buttons."""
+        self.ad_var.set(settings[STR_AD_BLOCK])
+        self.adult_var.set(settings[STR_ADULT_BLOCK])
+        
+    def _show_error(self, message: str, operation: str = "") -> None:
         """
-        Display an error message in a popup window.
+        Display and log an error message for an operation.
         
         Args:
-            message: The error message to display.
+            message: The error message to display to the user.
+            operation: Optional description of the operation that failed.
+                      If provided, will be included in the log message.
         """
-        self.logger.error(f"Error message displayed: {message}")
+        if operation:
+            self.logger.error(f"Operation failed: {operation} - Error: {message}")
+        else:
+            self.logger.error(f"Error: {message}")
+            
         tk.messagebox.showerror(STR_ERROR, message)
 
-    def _show_success(self, message: str) -> None:
+    def _show_success(self, message: str, operation: str = "") -> None:
         """
-        Display a success message in a popup window.
+        Display and log a success message for an operation.
         
         Args:
-            message: The success message to display.
+            message: The success message to display to the user.
+            operation: Optional description of the operation that succeeded.
+                      If provided, will be included in the log message.
         """
-        self.logger.info(f"Success message displayed: {message}")
+        log_message = f"Operation successful: {operation}" if operation else message
+        self.logger.info(log_message)
         tk.messagebox.showinfo(STR_SUCCESS, message)
 
     def _setup_ui(self) -> None:
@@ -291,14 +427,14 @@ class Viewer:
             button_frame,
             text="Add Domain",
             style='Action.TButton',
-            command=self._add_domain
+            command=self._add_domain_request
         ).grid(row=0, column=0, padx=5)
         
         ttk.Button(
             button_frame,
             text="Remove Domain",
             style='Action.TButton',
-            command=self._remove_domain
+            command=self._remove_domain_request
         ).grid(row=0, column=1, padx=5)
 
         # Right side controls with improved spacing
@@ -324,20 +460,20 @@ class Viewer:
         )
         
         # Initialize with config value
-        self.ad_var = tk.StringVar(value=self.config[STR_SETTINGS][STR_AD_BLOCK])
+        self.ad_var = tk.StringVar()
         ttk.Radiobutton(
             ad_frame,
             text="Enable",
             value="on",
             variable=self.ad_var,
-            command=self._handle_ad_block
+            command=self._handle_ad_block_request
         ).grid(row=0, column=0, padx=10)
         ttk.Radiobutton(
             ad_frame,
             text="Disable",
             value="off",
             variable=self.ad_var,
-            command=self._handle_ad_block
+            command=self._handle_ad_block_request
         ).grid(row=0, column=1, padx=10)
         
         # Adult sites Block controls
@@ -354,20 +490,20 @@ class Viewer:
         )
         
         # Initialize with config value
-        self.adult_var = tk.StringVar(value=self.config[STR_SETTINGS][STR_ADULT_BLOCK])
+        self.adult_var = tk.StringVar()
         ttk.Radiobutton(
             adult_frame,
             text="Enable",
             value="on",
             variable=self.adult_var,
-            command=self._handle_adult_block
+            command=self._handle_adult_block_request
         ).grid(row=0, column=0, padx=10)
         ttk.Radiobutton(
             adult_frame,
             text="Disable",
             value="off",
             variable=self.adult_var,
-            command=self._handle_adult_block
+            command=self._handle_adult_block_request
         ).grid(row=0, column=1, padx=10)
 
         # Configure grid weights for better resizing
@@ -381,8 +517,4 @@ class Viewer:
         button_frame.columnconfigure(1, weight=1)
 
         # Bind events
-        self.domains_listbox.bind('<Double-Button-1>', lambda e: self._remove_domain())
-
-        # Load saved domains
-        for domain in self.config[STR_BLOCKED_DOMAINS].keys():
-            self.domains_listbox.insert(tk.END, domain)
+        self.domains_listbox.bind('<Double-Button-1>', lambda e: self._remove_domain_request())

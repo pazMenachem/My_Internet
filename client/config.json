@@ -4,18 +4,6 @@
         "port": 65432,
         "receive_buffer_size": 1024
     },
-    "blocked_domains": {
-        "example.com": true,
-        "ads.example.com": true,
-        "fxp.co.il": true,
-        "test.com": true,
-        "e.com": true,
-        "fxp.com": true
-    },
-    "settings": {
-        "ad_block": "on",
-        "adult_block": "on"
-    },
     "logging": {
         "level": "INFO",
         "log_dir": "client_logs"

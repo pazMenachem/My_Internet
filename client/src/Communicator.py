@@ -81,7 +81,7 @@ class Communicator:
                     break
                 message = message_bytes.decode('utf-8')
                 self.logger.info(f"Received message: {message}")
-                self._message_callback(message)
+                self._message_callback(message, False)
         except Exception as e:
             self.logger.error(f"Error receiving message: {str(e)}")
             raise

@@ -90,7 +90,7 @@ def test_handle_request_domain_list_update(application: Application) -> None:
     })
     
     application._handle_request(test_request)
-    application._view.update_domain_list.assert_called_once_with(test_content)
+    application._view.update_domain_list_response.assert_called_once_with(test_content)
 
 
 def test_cleanup(application: Application) -> None:
