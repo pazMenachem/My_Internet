@@ -1,0 +1,11 @@
+{
+    "network": {
+        "host": "127.0.0.1",
+        "port": 65432,
+        "receive_buffer_size": 1024
+    },
+    "logging": {
+        "level": "INFO",
+        "log_dir": "client_logs"
+    }
+}
