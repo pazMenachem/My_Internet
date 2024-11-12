@@ -3,9 +3,8 @@ from typing import Optional, Callable
 import json
 from .Logger import setup_logger
 from .utils import (
-    DEFAULT_HOST, DEFAULT_PORT, DEFAULT_BUFFER_SIZE,
     ERR_SOCKET_NOT_SETUP, 
-    STR_NETWORK
+    STR_NETWORK, STR_HOST, STR_PORT, STR_RECEIVE_BUFFER_SIZE
 )
 
 class Communicator:
@@ -22,9 +21,9 @@ class Communicator:
         self.config = config_manager.get_config()
         self._message_callback = message_callback
         
-        self._host = self.config[STR_NETWORK][DEFAULT_HOST]
-        self._port = self.config[STR_NETWORK][DEFAULT_PORT]
-        self._receive_buffer_size = self.config[STR_NETWORK][DEFAULT_BUFFER_SIZE]
+        self._host = self.config[STR_NETWORK][STR_HOST]
+        self._port = int(self.config[STR_NETWORK][STR_PORT])
+        self._receive_buffer_size = int(self.config[STR_NETWORK][STR_RECEIVE_BUFFER_SIZE])
         self._socket: Optional[socket.socket] = None
 
     def connect(self) -> None:
@@ -42,12 +41,12 @@ class Communicator:
             self.logger.error(f"Failed to connect to server: {str(e)}")
             raise
 
-    def send_message(self, message: str) -> None:
+    def send_message(self, request: dict) -> None:
         """
-        Send a json message to the server.
+        Send a json request to the server.
         
         Args:
-            message_json: The message to send to the server.
+            request: The request to send to the server.
             
         Raises:
             RuntimeError: If socket connection is not established.
@@ -55,10 +54,10 @@ class Communicator:
         self._validate_connection()
 
         try:
-            self._socket.send(message.encode('utf-8'))
-            self.logger.info(f"Message sent: {message}")
+            self._socket.send(json.dumps(request).encode('utf-8'))
+            self.logger.info(f"Request sent: {request}")
         except Exception as e:
-            self.logger.error(f"Failed to send message: {str(e)}")
+            self.logger.error(f"Failed to send request: {str(e)}")
             raise
 
     def receive_message(self) -> None:

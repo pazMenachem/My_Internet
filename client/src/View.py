@@ -10,8 +10,8 @@ from .utils import (
     Codes,
     WINDOW_SIZE, WINDOW_TITLE,
     ERR_DUPLICATE_DOMAIN, ERR_NO_DOMAIN_SELECTED, ERR_DOMAIN_LIST_UPDATE_FAILED,
-    STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE,
-    STR_BLOCKED_DOMAINS, STR_CONTENT, STR_SETTINGS, STR_ERROR
+    STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE, STR_BLOCKED_DOMAINS,
+    STR_CONTENT, STR_SETTINGS, STR_ERROR, STR_SUCCESS
 )
 
 
@@ -182,6 +182,16 @@ class Viewer:
         """
         self.logger.error(f"Error message displayed: {message}")
         tk.messagebox.showerror(STR_ERROR, message)
+
+    def _show_success(self, message: str) -> None:
+        """
+        Display a success message in a popup window.
+        
+        Args:
+            message: The success message to display.
+        """
+        self.logger.info(f"Success message displayed: {message}")
+        tk.messagebox.showinfo(STR_SUCCESS, message)
 
     def _setup_ui(self) -> None:
         """Set up the UI components including block controls and domain list."""

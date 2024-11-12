@@ -1,9 +1,9 @@
 """Utility module containing constants and common functions for the application."""
 
 # Network related constants
-DEFAULT_HOST        = "host"
-DEFAULT_PORT        = "port"
-DEFAULT_BUFFER_SIZE = "receive_buffer_size"
+DEFAULT_HOST: str = "127.0.0.1"
+DEFAULT_PORT: str = "65432"
+DEFAULT_BUFFER_SIZE: str = "1024"
 
 # GUI constants
 WINDOW_TITLE    = "Site Blocker"
@@ -19,24 +19,8 @@ class Codes:
     CODE_ADD_DOMAIN         = "52"
     CODE_REMOVE_DOMAIN      = "53"
     CODE_DOMAIN_LIST_UPDATE = "54"
-
-# Default settings
-DEFAULT_CONFIG = {
-    "network": {
-        "host": DEFAULT_HOST,
-        "port": DEFAULT_PORT,
-        "receive_buffer_size": DEFAULT_BUFFER_SIZE
-    },
-    "blocked_domains": {},
-    "settings": {
-        "ad_block": "off",
-        "adult_block": "off"
-    },
-    "logging": {
-        "level": "INFO",
-        "log_dir": "client_logs"
-    }
-}
+    CODE_SUCCESS            = "100"
+    CODE_ERROR              = "101"
 
 # Logging constants
 LOG_DIR          = "client_logs"
@@ -56,9 +40,37 @@ STR_ADULT_BLOCK       = "adult_block"
 STR_CODE              = "code"
 STR_CONTENT           = "content"
 STR_ERROR             = "Error"
+STR_DOMAINS           = "domains"
+STR_SUCCESS           = "Success"
 
 # Config Constants
-STR_BLOCKED_DOMAINS  = "blocked_domains"
-STR_NETWORK          = "network"
-STR_SETTINGS         = "settings"
-STR_LOGGING          = "logging"
+STR_BLOCKED_DOMAINS     = "blocked_domains"
+STR_NETWORK             = "network"
+STR_SETTINGS            = "settings"
+STR_LOGGING             = "logging"
+STR_HOST                = "host"
+STR_PORT                = "port"
+STR_RECEIVE_BUFFER_SIZE = "receive_buffer_size"
+STR_LEVEL               = "level"
+STR_LOG_DIR             = "log_dir"
+
+# Default settings
+DEFAULT_CONFIG = {
+    STR_NETWORK: {
+        STR_HOST: DEFAULT_HOST,
+        STR_PORT: DEFAULT_PORT,
+        STR_RECEIVE_BUFFER_SIZE: DEFAULT_BUFFER_SIZE
+    },
+    
+    STR_BLOCKED_DOMAINS: {},
+    
+    STR_SETTINGS: {
+        STR_AD_BLOCK: "off",
+        STR_ADULT_BLOCK: "off"
+    },
+    
+    STR_LOGGING: {
+        STR_LEVEL: "INFO",
+        STR_LOG_DIR: LOG_DIR
+    }
+}

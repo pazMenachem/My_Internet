@@ -3,7 +3,12 @@ import socket
 import threading
 import json
 import asyncio
-from .utils import HOST, CLIENT_PORT, KERNEL_PORT
+from .utils import (
+    CLIENT_PORT, DEFAULT_ADDRESS, KERNEL_PORT,
+    STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE, STR_DOMAINS, STR_CONTENT,
+    STR_TOGGLE_ON, STR_TOGGLE_OFF, STR_DOMAIN,
+    Codes, invalid_json_response
+)
 from .db_manager import DatabaseManager
 from .handlers import RequestFactory
 from .logger import setup_logger
@@ -20,10 +25,10 @@ class Server:
     def handle_client_thread(self) -> None:
         """Handle client connections using traditional socket."""
         client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        client_socket.bind((HOST, CLIENT_PORT))
+        client_socket.bind((DEFAULT_ADDRESS, CLIENT_PORT))
         client_socket.listen(1)  
         client_socket.settimeout(1.0)  
-        self.logger.info(f"Client server running on {HOST}:{CLIENT_PORT}")
+        self.logger.info(f"Client server running on {DEFAULT_ADDRESS}:{CLIENT_PORT}")
 
         try:
             while self.running:
@@ -31,15 +36,13 @@ class Server:
                     conn, addr = client_socket.accept()
                     self.logger.info(f"Client connected from {addr}")
                     
-                    # Set timeout for client connection as well
                     conn.settimeout(1.0)
                     
                     try:
-                        # Send initial domain list
                         domains = self.db_manager.get_blocked_domains()
                         conn.send(json.dumps({
-                            'type': 'domain_list',
-                            'domains': domains
+                            STR_CODE: Codes.CODE_DOMAIN_LIST_UPDATE,
+                            STR_DOMAINS: domains
                         }).encode() + b'\n')
                         self.logger.debug(f"Sent initial domain list: {domains}")
 
@@ -53,21 +56,19 @@ class Server:
                                     request_data = json.loads(data.decode())
                                     self.logger.debug(f"Received request: {request_data}")
                                     response = self.request_factory.handle_request(request_data)
+                                    
                                     conn.send(json.dumps(response).encode() + b'\n')
                                     self.logger.debug(f"Sent response: {response}")
 
                                 except json.JSONDecodeError:
                                     self.logger.error("Invalid JSON format received")
-                                    conn.send(json.dumps({
-                                        'status': 'error',
-                                        'message': 'Invalid JSON format'
-                                    }).encode() + b'\n')
+                                    conn.send(json.dumps(invalid_json_response()).encode() + b'\n')
 
                                 except Exception as e:
                                     self.logger.error(f"Error handling request: {e}")
                                     conn.send(json.dumps({
-                                        'status': 'error',
-                                        'message': str(e)
+                                        STR_CODE: Codes.CODE_ERROR,
+                                        STR_CONTENT: str(e)
                                     }).encode() + b'\n')
 
                             except socket.timeout:
@@ -103,31 +104,27 @@ class Server:
                     break
 
                 request_data = json.loads(data.decode())
-                domain = request_data.get('domain', '').strip()
+                domain = request_data.get(STR_DOMAIN, '').strip()
                 
                 if not domain:
                     continue
 
-                # Get current settings state
-                ad_block_enabled = self.db_manager.get_setting('ad_block') == 'on'
-                adult_block_enabled = self.db_manager.get_setting('adult_block') == 'on'
+                ad_block_enabled = self.db_manager.get_setting(STR_AD_BLOCK) == STR_TOGGLE_ON
+                adult_block_enabled = self.db_manager.get_setting(STR_ADULT_BLOCK) == STR_TOGGLE_ON
 
                 block_reason = None
                 should_block = False
                 
-                # Check custom blocked domains first
                 if self.db_manager.is_domain_blocked(domain):
                     should_block = True
                     block_reason = "custom_blocklist"
                     self.logger.info(f"Domain {domain} blocked (custom blocklist)")
                 
-                # Check if ad blocking is enabled and domain is an ad
                 elif ad_block_enabled and request_data.get('is_ad', False):
                     should_block = True
                     block_reason = "ads"
                     self.logger.info(f"Domain {domain} blocked (ads)")
                 
-                # Check adult content last if enabled
                 elif adult_block_enabled and 'adult' in request_data.get('categories', []):
                     should_block = True
                     block_reason = "adult_content"
@@ -157,18 +154,16 @@ class Server:
         kernel_server: Optional[asyncio.Server] = None
         
         try:
-            # Start client handler in a separate thread
             client_thread = threading.Thread(target=self.handle_client_thread)
             client_thread.start()
             self.logger.info("Client handler thread started")
 
-            # Run kernel handler with asyncio
             kernel_server = await asyncio.start_server(
                 self.handle_kernel_requests,
-                HOST,
+                DEFAULT_ADDRESS,
                 KERNEL_PORT
             )
-            self.logger.info(f"Kernel server running on {HOST}:{KERNEL_PORT}")
+            self.logger.info(f"Kernel server running on {DEFAULT_ADDRESS}:{KERNEL_PORT}")
             
             async with kernel_server:
                 await kernel_server.serve_forever()

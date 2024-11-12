@@ -6,7 +6,7 @@ from .Logger import setup_logger
 from .ConfigManager import ConfigManager
 
 from .utils import (
-    STR_CODE, STR_CONTENT,
+    STR_CODE, STR_DOMAINS, STR_CONTENT,
     Codes
 )
 
@@ -87,13 +87,19 @@ class Application:
             
             with self._request_lock:
                 match request_dict[STR_CODE]:
+                    ## Codes sent to server
                     case Codes.CODE_AD_BLOCK      | \
                          Codes.CODE_ADULT_BLOCK   | \
                          Codes.CODE_ADD_DOMAIN    | \
                          Codes.CODE_REMOVE_DOMAIN:
-                        self._communicator.send_message(json.dumps(request))
+                        self._communicator.send_message(request_dict)
+                    ## Codes received from server
                     case Codes.CODE_DOMAIN_LIST_UPDATE:
-                        self._view.update_domain_list(request_dict[STR_CONTENT])
+                        self._view.update_domain_list(request_dict[STR_DOMAINS])
+                    case Codes.CODE_ERROR:
+                        self._view._show_error(request_dict[STR_CONTENT])
+                    case Codes.CODE_SUCCESS:
+                        self._view._show_success(request_dict[STR_CONTENT])
 
         except json.JSONDecodeError as e:
             self._logger.error(f"Invalid JSON format: {str(e)}")
