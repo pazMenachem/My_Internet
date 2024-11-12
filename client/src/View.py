@@ -115,9 +115,8 @@ class Viewer:
                 match response[STR_CODE]:
                     case Codes.CODE_SUCCESS:
                         domain = response[STR_CONTENT]
-                        with self._update_list_lock:
-                            self.domains_listbox.insert(tk.END, domain)
-                            self.domain_entry.delete(0, tk.END)
+                        self.domains_listbox.insert(tk.END, domain)
+                        self.domain_entry.delete(0, tk.END)
                             
                         self._show_success(
                             message=f"Domain '{domain}' added successfully",

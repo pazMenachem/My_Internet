@@ -73,31 +73,33 @@ class DomainBlockHandler(RequestHandler):
                 return invalid_json_response()
 
             operation_code = request_data[STR_CODE]
+            domain = request_data[STR_CONTENT]
+            
             match operation_code:
                 case Codes.CODE_ADD_DOMAIN:
-                    self.db_manager.add_blocked_domain(request_data[STR_CONTENT])
-                    self.logger.info(f"Domain blocked: {request_data[STR_CONTENT]}")
+                    self.db_manager.add_blocked_domain(domain)
+                    self.logger.info(f"Domain blocked: {domain}")
                     
                     return {
                         STR_CODE: Codes.CODE_SUCCESS,
-                        STR_CONTENT: STR_DOMAIN_BLOCKED_MSG,
+                        STR_CONTENT: domain,
                         STR_OPERATION: Codes.CODE_ADD_DOMAIN
                     }
 
                 case Codes.CODE_REMOVE_DOMAIN:
-                    if self.db_manager.remove_blocked_domain(request_data[STR_CONTENT]):
-                        self.logger.info(f"Domain unblocked: {request_data[STR_CONTENT]}")
+                    if self.db_manager.remove_blocked_domain(domain):
+                        self.logger.info(f"Domain unblocked: {domain}")
 
                         return {
                             STR_CODE: Codes.CODE_SUCCESS,
-                            STR_CONTENT: STR_DOMAIN_UNBLOCKED_MSG,
+                            STR_CONTENT: domain,
                             STR_OPERATION: Codes.CODE_REMOVE_DOMAIN
                         }
 
-                    self.logger.warning(f"Domain not found for unblocking: {request_data[STR_CONTENT]}")
+                    self.logger.warning(f"Domain not found for unblocking: {domain}")
                     return {
                         STR_CODE: Codes.CODE_ERROR,
-                        STR_CONTENT: STR_DOMAIN_NOT_FOUND_MSG,
+                        STR_CONTENT: domain,
                         STR_OPERATION: Codes.CODE_REMOVE_DOMAIN
                     }
                     
