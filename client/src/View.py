@@ -82,7 +82,7 @@ class Viewer:
             STR_ADULT_BLOCK: self.adult_var.get()
         }
 
-    def update_domain_list_response(self, domains: List[str]) -> None:
+    def update_domain_list_response(self, domains: list[str]) -> None:
         """
         Update the domains listbox with a new list of domains from the server.
 

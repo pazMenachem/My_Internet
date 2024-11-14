@@ -73,7 +73,7 @@ class Application:
             self._logger.error(f"Failed to start GUI: {str(e)}")
             raise
 
-    def _handle_request(self, request: str, server: bool = True) -> None:
+    def _handle_request(self, request: str, to_server: bool = True) -> None:
         """
         Handle outgoing messages from the UI and Server.
         
@@ -84,7 +84,7 @@ class Application:
             self._logger.info(f"Processing request: {request}")
             request_dict = json.loads(request)
             
-            if server:
+            if to_server:
                 message = request if isinstance(request, dict) else json.loads(request)
                 self._communicator.send_message(message)
                 return

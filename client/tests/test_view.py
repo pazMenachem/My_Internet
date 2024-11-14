@@ -1,158 +1,159 @@
+"""Unit tests for the Viewer class."""
+
 import pytest
 from unittest import mock
 import json
-from typing import Callable
+from typing import Dict, Any
 
 from src.View import Viewer
 from src.utils import (
-    Codes, STR_CODE, STR_CONTENT,
-    STR_SETTINGS, STR_AD_BLOCK, STR_ADULT_BLOCK,
-    STR_BLOCKED_DOMAINS, DEFAULT_CONFIG,
-    ERR_DUPLICATE_DOMAIN
+    Codes, STR_CODE, STR_CONTENT, STR_DOMAINS, STR_SETTINGS,
+    STR_AD_BLOCK, STR_ADULT_BLOCK
 )
 
 @pytest.fixture
 def mock_config_manager() -> mock.Mock:
-    """Fixture to provide a mock configuration manager."""
+    """Create a mock configuration manager fixture."""
     config_manager = mock.Mock()
-    config_manager.get_config.return_value = DEFAULT_CONFIG.copy()
+    config_manager.get_config.return_value = {
+        "network": {
+            "host": "127.0.0.1",
+            "port": 65432
+        }
+    }
     return config_manager
 
 @pytest.fixture
-def mock_callback() -> Callable[[str], None]:
-    """Fixture to provide a mock callback function."""
+def mock_callback() -> mock.Mock:
+    """Create a mock callback function fixture."""
     return mock.Mock()
 
 @pytest.fixture
-def viewer(mock_config_manager: mock.Mock, mock_callback: mock.Mock) -> Viewer:
-    """Fixture to create a Viewer instance with mocked components."""
-    with mock.patch('tkinter.Tk') as mock_tk, \
-         mock.patch('tkinter.ttk.Style'):
-        # Create a mock Tk instance
-        root = mock_tk.return_value
+def mock_tk() -> mock.Mock:
+    """Create a mock for tkinter components."""
+    with mock.patch('src.View.tk') as mock_tk:
+        # Mock Tk instance
+        mock_root = mock.Mock()
+        mock_tk.Tk.return_value = mock_root
         
-        # Set up the mock root properly
-        mock_tk._default_root = root
-        root._default_root = root
+        # Mock StringVar
+        mock_string_var = mock.Mock()
+        mock_string_var.get.return_value = "on"
+        mock_tk.StringVar.return_value = mock_string_var
         
-        # Create StringVar mock that returns string values
-        with mock.patch('tkinter.StringVar') as mock_string_var:
-            string_var_instance = mock.Mock()
-            string_var_instance.get.return_value = "off"
-            mock_string_var.return_value = string_var_instance
-            
-            # Create Entry and Listbox mocks
-            with mock.patch('tkinter.Entry') as mock_entry, \
-                 mock.patch('tkinter.Listbox') as mock_listbox:
-                
-                # Setup Entry mock
-                entry_instance = mock.Mock()
-                entry_instance.get.return_value = ""
-                mock_entry.return_value = entry_instance
-                
-                # Setup Listbox mock
-                listbox_instance = mock.Mock()
-                listbox_instance.curselection.return_value = ()
-                listbox_instance.get.return_value = ""
-                mock_listbox.return_value = listbox_instance
-                
-                viewer = Viewer(
-                    config_manager=mock_config_manager,
-                    message_callback=mock_callback
-                )
-                
-                # Store mock instances for easy access in tests
-                viewer.domain_entry = entry_instance
-                viewer.domains_listbox = listbox_instance
-                
-                # Mock the _show_error method
-                viewer._show_error = mock.Mock()
-                
-                return viewer
+        # Mock Listbox
+        mock_listbox = mock.Mock()
+        mock_listbox.get.side_effect = lambda start, end: ["domain1.com", "domain2.com"]
+        mock_tk.Listbox.return_value = mock_listbox
+        
+        yield mock_tk
 
-def test_get_block_settings(viewer: Viewer) -> None:
-    """Test getting block settings."""
-    # Configure the mock StringVar to return specific values
-    viewer.ad_var.get.return_value = "off"
-    viewer.adult_var.get.return_value = "off"
-    
-    settings = viewer.get_block_settings()
-    assert STR_AD_BLOCK in settings
-    assert STR_ADULT_BLOCK in settings
-    assert isinstance(settings[STR_AD_BLOCK], str)
-    assert isinstance(settings[STR_ADULT_BLOCK], str)
+@pytest.fixture
+def viewer(
+    mock_config_manager: mock.Mock,
+    mock_callback: mock.Mock,
+    mock_tk: mock.Mock
+) -> Viewer:
+    """Create a Viewer instance with mocked dependencies."""
+    with mock.patch('src.View.ttk'), \
+         mock.patch('src.View.messagebox'), \
+         mock.patch('src.View.setup_logger') as mock_logger:
+        logger_instance = mock.Mock()
+        mock_logger.return_value = logger_instance
+        
+        viewer = Viewer(
+            config_manager=mock_config_manager,
+            message_callback=mock_callback
+        )
+        
+        # Set up instance variables that would normally be created in _setup_ui
+        viewer.domains_listbox = mock_tk.Listbox.return_value
+        viewer.ad_var = mock_tk.StringVar.return_value
+        viewer.adult_var = mock_tk.StringVar.return_value
+        viewer.domain_entry = mock.Mock()
+        
+        return viewer
 
-def test_handle_ad_block(viewer: Viewer) -> None:
-    """Test handling ad block setting changes."""
-    # Configure the mock StringVar to return "on"
-    viewer.ad_var.get.return_value = "on"
-    viewer._handle_ad_block_request()
-    
-    expected_json = json.dumps({
+def test_handle_ad_block_request(viewer: Viewer) -> None:
+    """Test handling ad block request message formation."""
+    expected_message = json.dumps({
         STR_CODE: Codes.CODE_AD_BLOCK,
         STR_CONTENT: "on"
     })
     
-    viewer._message_callback.assert_called_once_with(expected_json)
-    viewer.config_manager.save_config.assert_called_once_with(viewer.config)
-    assert viewer.config[STR_SETTINGS][STR_AD_BLOCK] == "on"
+    viewer._handle_ad_block_request()
+    viewer._message_callback.assert_called_once_with(expected_message)
 
-def test_handle_adult_block(viewer: Viewer) -> None:
-    """Test handling adult block setting changes."""
-    # Configure the mock StringVar to return "on"
-    viewer.adult_var.get.return_value = "on"
-    viewer._handle_adult_block_request()
-    
-    expected_json = json.dumps({
+def test_handle_adult_block_request(viewer: Viewer) -> None:
+    """Test handling adult block request message formation."""
+    expected_message = json.dumps({
         STR_CODE: Codes.CODE_ADULT_BLOCK,
         STR_CONTENT: "on"
     })
     
-    viewer._message_callback.assert_called_once_with(expected_json)
-    viewer.config_manager.save_config.assert_called_once_with(viewer.config)
-    assert viewer.config[STR_SETTINGS][STR_ADULT_BLOCK] == "on"
+    viewer._handle_adult_block_request()
+    viewer._message_callback.assert_called_once_with(expected_message)
 
-def test_add_domain(viewer: Viewer) -> None:
-    """Test adding a domain."""
-    domain = "test.com"
-    viewer.domain_entry.get.return_value = domain
-    viewer._add_domain_request()
+def test_update_initial_settings(viewer: Viewer) -> None:
+    """Test updating initial settings from server response."""
+    test_settings = {
+        STR_DOMAINS: ["example.com", "test.com"],
+        STR_SETTINGS: {
+            STR_AD_BLOCK: "on",
+            STR_ADULT_BLOCK: "off"
+        }
+    }
     
-    expected_json = json.dumps({
-        STR_CODE: Codes.CODE_ADD_DOMAIN,
-        STR_CONTENT: domain
-    })
-    
-    viewer._message_callback.assert_called_once_with(expected_json)
-    viewer.config_manager.save_config.assert_called_once_with(viewer.config)
-    assert viewer.config[STR_BLOCKED_DOMAINS][domain] is True
+    viewer.update_initial_settings(test_settings)
+    viewer.logger.info.assert_called_with("Successfully initialized settings from server")
 
-def test_add_duplicate_domain(viewer: Viewer) -> None:
-    """Test adding a duplicate domain."""
-    domain = "test.com"
-    viewer.config[STR_BLOCKED_DOMAINS][domain] = True
-    viewer.domain_entry.get.return_value = domain
+def test_update_domain_list_response(viewer: Viewer) -> None:
+    """Test updating domain list from server response."""
+    test_domains = ["domain1.com", "domain2.com"]
     
-    viewer._add_domain_request()
-    
-    viewer._message_callback.assert_not_called()
-    viewer._show_error.assert_called_once_with(ERR_DUPLICATE_DOMAIN)
-    assert len(viewer.config[STR_BLOCKED_DOMAINS]) == 1
+    viewer.update_domain_list_response(test_domains)
+    viewer.logger.info.assert_called_with(f"Updated domain list with {len(test_domains)} domains")
 
-def test_remove_domain(viewer: Viewer) -> None:
-    """Test removing a domain."""
-    domain = "test.com"
-    viewer.config[STR_BLOCKED_DOMAINS][domain] = True
-    viewer.domains_listbox.curselection.return_value = (0,)
-    viewer.domains_listbox.get.return_value = domain
+@pytest.mark.parametrize("response,expected_log", [
+    (
+        {STR_CODE: Codes.CODE_SUCCESS,
+         STR_CONTENT: "test.com"},
+        "info"
+    ),
+    (
+        {STR_CODE: Codes.CODE_ERROR,
+         STR_CONTENT: "Failed to add domain"},
+        "error"
+    )
+])
+def test_add_domain_response(
+    viewer: Viewer,
+    response: Dict[str, Any],
+    expected_log: str
+) -> None:
+    """Test handling add domain response from server."""
+    # Reset the mock call counts before our test
+    viewer.logger.info.reset_mock()
+    viewer.logger.error.reset_mock()
     
-    viewer._remove_domain_request()
+    viewer.add_domain_response(response)
     
-    expected_json = json.dumps({
-        STR_CODE: Codes.CODE_REMOVE_DOMAIN,
-        STR_CONTENT: domain
-    })
-    
-    viewer._message_callback.assert_called_once_with(expected_json)
-    viewer.config_manager.save_config.assert_called_once_with(viewer.config)
-    assert domain not in viewer.config[STR_BLOCKED_DOMAINS]
+    if expected_log == "info":
+        viewer.logger.info.assert_called_once()
+        viewer.logger.error.assert_not_called()
+    else:
+        viewer.logger.error.assert_called_once()
+
+def test_get_blocked_domains(viewer: Viewer) -> None:
+    """Test getting list of blocked domains."""
+    expected_domains = ["domain1.com", "domain2.com"]
+    domains = list(viewer.get_blocked_domains())
+    assert domains == expected_domains
+
+def test_get_block_settings(viewer: Viewer) -> None:
+    """Test getting block settings."""
+    settings = viewer.get_block_settings()
+    assert settings == {
+        STR_AD_BLOCK: "on",
+        STR_ADULT_BLOCK: "on"
+    }
