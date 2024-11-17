@@ -174,17 +174,8 @@ class Server:
     def _get_initial_settings(self) -> Dict[str, Any]:
         """Get initial settings and domain list for client initialization."""
         try:
-            domains = self.db_manager.get_blocked_domains()
-            settings = {
-                STR_AD_BLOCK: self.db_manager.get_setting(STR_AD_BLOCK),
-                STR_ADULT_BLOCK: self.db_manager.get_setting(STR_ADULT_BLOCK)
-            }
-            
-            return {
-                STR_OPERATION: Codes.CODE_INIT_SETTINGS,
-                STR_DOMAINS: domains,
-                STR_SETTINGS: settings
-            }
+            request_data = {STR_CODE: Codes.CODE_INIT_SETTINGS}
+            return self.request_factory.handle_request(request_data)
         except Exception as e:
             self.logger.error(f"Error getting initial settings: {e}")
             return invalid_json_response()

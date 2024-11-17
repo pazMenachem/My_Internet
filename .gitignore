@@ -844,6 +844,6 @@ FodyWeavers.xsd
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio
 
-# End of https://www.toptal.com/developers/gitignore/api/python,c,windows,linux,visualstudio,pycharm,clion
-server/client.py
+## Misc
 server/my_internet.db
+kernel/test_module

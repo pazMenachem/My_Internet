@@ -120,24 +120,32 @@ class DomainBlockHandler(RequestHandler):
                 STR_OPERATION: operation_code
             }
 
-class DomainListHandler(RequestHandler):
+class SettingsHandler(RequestHandler):
+    """Handle settings and domain list requests."""
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Handle domain list requests."""
+        """Handle settings requests."""
         try:
+            # Get domains and settings
             domains = self.db_manager.get_blocked_domains()
-            self.logger.info(f"Domain list requested, returned {len(domains)} domains")
+            settings = {
+                STR_AD_BLOCK: self.db_manager.get_setting(STR_AD_BLOCK),
+                STR_ADULT_BLOCK: self.db_manager.get_setting(STR_ADULT_BLOCK)
+            }
+            
+            self.logger.info(f"Settings requested, returned {len(domains)} domains")
             return {
                 STR_CODE: Codes.CODE_SUCCESS,
                 STR_DOMAINS: domains,
-                STR_OPERATION: Codes.CODE_DOMAIN_LIST_UPDATE
+                STR_SETTINGS: settings,
+                STR_OPERATION: Codes.CODE_INIT_SETTINGS
             }
 
         except Exception as e:
-            self.logger.error(f"Error in domain list handler: {e}")
+            self.logger.error(f"Error in settings handler: {e}")
             return {
                 STR_CODE: Codes.CODE_ERROR,
                 STR_CONTENT: str(e),
-                STR_OPERATION: Codes.CODE_DOMAIN_LIST_UPDATE
+                STR_OPERATION: Codes.CODE_INIT_SETTINGS
             }
 
 class RequestFactory:
@@ -146,11 +154,11 @@ class RequestFactory:
         self.db_manager = db_manager
         self.logger = setup_logger(__name__)
         self.handlers = {
-            Codes.CODE_AD_BLOCK           : AdBlockHandler(db_manager),
-            Codes.CODE_ADULT_BLOCK        : AdultContentBlockHandler(db_manager),
-            Codes.CODE_ADD_DOMAIN         : DomainBlockHandler(db_manager),
-            Codes.CODE_REMOVE_DOMAIN      : DomainBlockHandler(db_manager),
-            Codes.CODE_DOMAIN_LIST_UPDATE : DomainListHandler(db_manager)
+            Codes.CODE_AD_BLOCK: AdBlockHandler(db_manager),
+            Codes.CODE_ADULT_BLOCK: AdultContentBlockHandler(db_manager),
+            Codes.CODE_ADD_DOMAIN: DomainBlockHandler(db_manager),
+            Codes.CODE_REMOVE_DOMAIN: DomainBlockHandler(db_manager),
+            Codes.CODE_INIT_SETTINGS: SettingsHandler(db_manager)
         }
 
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
