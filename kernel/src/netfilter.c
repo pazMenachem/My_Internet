@@ -1,0 +1,195 @@
+// netfilter.c
+#include "domain_blocker.h"
+#include "cache.c"
+
+static struct nf_hook_ops nfho_pre_routing;
+static struct nf_hook_ops nfho_local_out;
+
+static int parse_dns_name(unsigned char *src, char *dst, int max_len) {
+    int len = 0;
+    int step;
+    
+    while (*src) {
+        step = *src++;
+        if (step >= max_len - len - 1)
+            return -1;
+            
+        if (len)
+            dst[len++] = '.';
+            
+        if (step > 0) {
+            memcpy(dst + len, src, step);
+            len += step;
+            src += step;
+        }
+    }
+    
+    dst[len] = '\0';
+    return len;
+}
+
+static bool is_dns_query(struct sk_buff *skb) {
+    struct udphdr *udp;
+    struct dns_header *dns;
+
+    udp = udp_hdr(skb);
+    if (!udp || ntohs(udp->dest) != 53)
+        return false;
+
+    dns = (struct dns_header *)(udp + 1);
+    return dns && ntohs(dns->q_count) > 0;
+}
+
+static int extract_dns_query(struct sk_buff *skb, char *domain, int maxlen) {
+    struct udphdr *udp;
+    struct dns_header *dns;
+    unsigned char *data;
+
+    udp = udp_hdr(skb);
+    if (!udp)
+        return -1;
+
+    dns = (struct dns_header *)(udp + 1);
+    if (!dns)
+        return -1;
+
+    data = (unsigned char *)(dns + 1);
+    return parse_dns_name(data, domain, maxlen);
+}
+
+static void block_dns_response(struct sk_buff *skb) {
+    struct udphdr *udp;
+    struct dns_header *dns;
+
+    udp = udp_hdr(skb);
+    if (!udp)
+        return;
+
+    dns = (struct dns_header *)(udp + 1);
+    if (!dns)
+        return;
+
+    dns->flags |= htons(1 << 15);  // Set response bit
+    dns->flags |= htons(3);        // Set "Name Error" response code
+}
+
+static unsigned int pre_routing_hook(void *priv,
+                                   struct sk_buff *skb,
+                                   const struct nf_hook_state *state) {
+    struct iphdr *ip_header;
+    char domain[MAX_DOMAIN_LENGTH];
+    
+    if (!skb)
+        return NF_ACCEPT;
+
+    ip_header = ip_hdr(skb);
+    if (!ip_header)
+        return NF_ACCEPT;
+
+    if (ip_header->protocol == IPPROTO_UDP && is_dns_query(skb)) {
+        if (extract_dns_query(skb, domain, sizeof(domain)) > 0) {
+            if (is_domain_blocked(domain)) {
+                printk(KERN_INFO "Domain Blocker: Blocking DNS query for domain: %s\n", domain);
+                block_dns_response(skb);
+                return NF_DROP;
+            }
+        }
+    }
+
+    return NF_ACCEPT;
+}
+
+static unsigned int local_out_hook(void *priv,
+                                 struct sk_buff *skb,
+                                 const struct nf_hook_state *state) {
+    struct iphdr *ip_header;
+    struct udphdr *udp;
+    struct settings_cache current_settings;
+    struct sk_buff *skb2 = NULL;
+    __be32 adblock_dns = in_aton("94.140.14.14");
+    __be32 adult_dns = in_aton("1.1.1.3");
+    
+    if (!skb)
+        return NF_ACCEPT;
+
+    ip_header = ip_hdr(skb);
+    if (!ip_header)
+        return NF_ACCEPT;
+
+    if (ip_header->protocol == IPPROTO_UDP) {
+        udp = udp_hdr(skb);
+        if (!udp || ntohs(udp->dest) != 53) 
+            return NF_ACCEPT;
+
+        spin_lock(&cache_lock);
+        current_settings = settings;
+        spin_unlock(&cache_lock);
+
+        if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
+            skb2 = skb_clone(skb, GFP_ATOMIC);
+            if (skb2) {
+                ip_header = ip_hdr(skb2);
+                ip_header->daddr = adult_dns;
+                ip_header->check = 0;
+                ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
+                NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_OUT, 
+                       state->net, state->sk, skb2, 
+                       state->in, state->out, 
+                       state->okfn);
+            }
+
+            ip_header = ip_hdr(skb);
+            ip_header->daddr = adblock_dns;
+            ip_header->check = 0;
+            ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
+            return NF_ACCEPT;
+        }
+
+        if (current_settings.ad_block_enabled) {
+            ip_header->daddr = adblock_dns;
+            ip_header->check = 0;
+            ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
+        }
+        if (current_settings.adult_content_enabled) {
+            ip_header->daddr = adult_dns;
+            ip_header->check = 0;
+            ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
+        }
+    }
+
+    return NF_ACCEPT;
+}
+
+int init_netfilter(void) {
+    int ret = 0;
+
+    nfho_pre_routing.hook = pre_routing_hook;
+    nfho_pre_routing.hooknum = NF_INET_PRE_ROUTING;
+    nfho_pre_routing.pf = PF_INET;
+    nfho_pre_routing.priority = NF_IP_PRI_FIRST;
+
+    ret = nf_register_net_hook(&init_net, &nfho_pre_routing);
+    if (ret < 0) {
+        printk(KERN_ERR "Domain Blocker: Failed to register pre-routing hook\n");
+        return ret;
+    }
+
+    nfho_local_out.hook = local_out_hook;
+    nfho_local_out.hooknum = NF_INET_LOCAL_OUT;
+    nfho_local_out.pf = PF_INET;
+    nfho_local_out.priority = NF_IP_PRI_FIRST;
+
+    ret = nf_register_net_hook(&init_net, &nfho_local_out);
+    if (ret < 0) {
+        nf_unregister_net_hook(&init_net, &nfho_pre_routing);
+        printk(KERN_ERR "Domain Blocker: Failed to register local out hook\n");
+        return ret;
+    }
+
+    return 0;
+}
+
+void cleanup_netfilter(void) {
+    nf_unregister_net_hook(&init_net, &nfho_pre_routing);
+    nf_unregister_net_hook(&init_net, &nfho_local_out);
+}
