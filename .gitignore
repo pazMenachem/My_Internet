@@ -846,4 +846,9 @@ FodyWeavers.xsd
 # Additional files built by Visual Studio
 
 ## Misc
+<<<<<<< HEAD
 my_internet.db
+=======
+server/my_internet.db
+kernel/test_module
+>>>>>>> 4589870a3e671ca9ef35304718bdcccb156aa764
