@@ -3,14 +3,30 @@
 
 #include <linux/types.h>
 
-#define HASH_SIZE            8
-#define MAX_DOMAIN_LENGTH    256
-#define MAX_PAYLOAD         1024
+#define HASH_SIZE               8
+#define MAX_DOMAIN_LENGTH       256
+#define MAX_PAYLOAD             1024
+#define SERVER_PORT             65433
+
+// Message codes matching server's utils.py
+#define CODE_AD_BLOCK           "50"
+#define CODE_ADULT_BLOCK        "51"
+#define CODE_ADD_DOMAIN         "52"
+#define CODE_REMOVE_DOMAIN      "53"
+#define CODE_DOMAIN_LIST_UPDATE "54"
+#define CODE_INIT_SETTINGS      "55"
+#define CODE_SUCCESS            "100"
+#define CODE_ERROR              "101"
+
+// JSON field names matching server's utils.py
+#define STR_CODE                "code"
+#define STR_CONTENT             "content"
+#define STR_OPERATION           "operation"
 
 /* DNS Server configurations */
-#define ADGUARD_DNS         "94.140.14.14"
-#define CLOUDFLARE_DNS      "1.1.1.3"
-#define ADGUARD_FAMILY_DNS  "94.140.14.15"
+#define ADGUARD_DNS             "94.140.14.14"
+#define CLOUDFLARE_DNS          "1.1.1.3"
+#define ADGUARD_FAMILY_DNS      "94.140.14.15"
 
 /* Common structures used across modules */
 struct dns_header {
