@@ -22,6 +22,8 @@
 #define STR_CODE                "code"
 #define STR_CONTENT             "content"
 #define STR_OPERATION           "operation"
+#define STR_AD_BLOCK            "ad_block"
+#define STR_ADULT_BLOCK         "adult_block"
 
 /* DNS Server configurations */
 #define ADGUARD_DNS             "94.140.14.14"
