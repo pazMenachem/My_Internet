@@ -1,11 +1,12 @@
-// netfilter.c
-#include "domain_blocker.h"
-#include "cache.c"
+#include "netfilter.h"
 
+/* Netfilter hook operations */
 static struct nf_hook_ops nfho_pre_routing;
 static struct nf_hook_ops nfho_local_out;
 
-static int parse_dns_name(unsigned char *src, char *dst, int max_len) {
+/* DNS packet handling functions */
+static int parse_dns_name(unsigned char *src, char *dst, int max_len)
+{
     int len = 0;
     int step;
     

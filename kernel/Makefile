@@ -1,5 +1,5 @@
 # Kernel module name
-MODULE_NAME = domain_blocker
+MODULE_NAME = Network_Filter
 
 # Source files
 obj-m := $(MODULE_NAME).o

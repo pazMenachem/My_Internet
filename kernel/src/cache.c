@@ -1,10 +1,13 @@
-#include "domain_blocker.h"
+#include "cache.h"
 
+/* Global variables */
 static DEFINE_HASHTABLE(domain_cache, HASH_SIZE);
-static struct settings_cache settings;
 static DEFINE_SPINLOCK(cache_lock);
+static struct settings_cache settings;
 
-static unsigned int hash_domain(const char *domain) {
+/* Simple but effective domain hash function */
+static unsigned int hash_domain(const char *domain)
+{
     unsigned int hash = 0;
     while (*domain) {
         hash = hash * 31 + *domain;
@@ -53,19 +56,23 @@ void remove_domain_from_cache(const char *domain) {
     struct domain_entry *entry;
     unsigned int hash = hash_domain(domain);
     struct hlist_node *tmp;
+    struct domain_entry *found_entry = NULL;
 
     spin_lock(&cache_lock);
     hash_for_each_possible_safe(domain_cache, entry, tmp, node, hash) {
         if (strcmp(entry->domain, domain) == 0) {
             hash_del_rcu(&entry->node);
-            spin_unlock(&cache_lock);
-            synchronize_rcu();
-            kfree(entry->domain);
-            kfree(entry);
-            return;
+            found_entry = entry;
+            break;
         }
     }
     spin_unlock(&cache_lock);
+
+    if (found_entry) {
+        synchronize_rcu();
+        kfree(found_entry->domain);
+        kfree(found_entry);
+    }
 }
 
 void update_settings(bool ad_block, bool adult_block) {
