@@ -4,6 +4,7 @@
 #include "utils.h"
 #include "cache.h"
 #include "netfilter.h"
+#include "network.h"
 
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Your Name");
