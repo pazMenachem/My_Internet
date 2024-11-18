@@ -123,15 +123,20 @@ static unsigned int local_out_hook(void *priv,
         current_settings = settings;
         spin_unlock(&cache_lock);
 
+        // Get current DNS server based on settings
+        if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
+            ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);      // Both filters
+        } else if (current_settings.ad_block_enabled) {
+            ip_header->daddr = in_aton(ADGUARD_DNS);             // Only ad blocking
+        } else if (current_settings.adult_content_enabled) {
+            ip_header->daddr = in_aton(CLOUDFLARE_DNS);          // Only adult content filtering
+        } else {
+            return NF_ACCEPT;                                     // No filtering, use system DNS
+        }
+
         ip_header->check = 0;
         ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
 
-        if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) 
-            ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);
-        if (current_settings.ad_block_enabled && !current_settings.adult_content_enabled)
-            ip_header->daddr = in_aton(ADGUARD_DNS);
-        if (current_settings.adult_content_enabled && !current_settings.ad_block_enabled)
-            ip_header->daddr = in_aton(CLOUDFLARE_DNS);
         return NF_ACCEPT;
     }
 
