@@ -27,6 +27,9 @@
 #define MAX_PAYLOAD 1024
 #define HASH_SIZE 8  // 2^8 = 256 buckets
 #define MAX_DOMAIN_LENGTH 256
+#define ADGUARD_DNS          "94.140.14.14"  // blocks ads
+#define CLOUDFLARE_DNS       "1.1.1.3"       // locks adult
+#define ADGUARD_FAMILY_DNS   "94.140.14.15"  // blocks both
 
 // Message codes matching server's utils.py
 #define CODE_AD_BLOCK           "50"

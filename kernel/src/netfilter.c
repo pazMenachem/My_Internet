@@ -105,9 +105,6 @@ static unsigned int local_out_hook(void *priv,
     struct iphdr *ip_header;
     struct udphdr *udp;
     struct settings_cache current_settings;
-    struct sk_buff *skb2 = NULL;
-    __be32 adblock_dns = in_aton("94.140.14.14");
-    __be32 adult_dns = in_aton("1.1.1.3");
     
     if (!skb)
         return NF_ACCEPT;
@@ -118,43 +115,23 @@ static unsigned int local_out_hook(void *priv,
 
     if (ip_header->protocol == IPPROTO_UDP) {
         udp = udp_hdr(skb);
-        if (!udp || ntohs(udp->dest) != 53) 
+        if (!udp || ntohs(udp->dest) != 53)
             return NF_ACCEPT;
 
         spin_lock(&cache_lock);
         current_settings = settings;
         spin_unlock(&cache_lock);
 
-        if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
-            skb2 = skb_clone(skb, GFP_ATOMIC);
-            if (skb2) {
-                ip_header = ip_hdr(skb2);
-                ip_header->daddr = adult_dns;
-                ip_header->check = 0;
-                ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
-                NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_OUT, 
-                       state->net, state->sk, skb2, 
-                       state->in, state->out, 
-                       state->okfn);
-            }
+        ip_header->check = 0;
+        ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
 
-            ip_header = ip_hdr(skb);
-            ip_header->daddr = adblock_dns;
-            ip_header->check = 0;
-            ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
-            return NF_ACCEPT;
-        }
-
-        if (current_settings.ad_block_enabled) {
-            ip_header->daddr = adblock_dns;
-            ip_header->check = 0;
-            ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
-        }
-        if (current_settings.adult_content_enabled) {
-            ip_header->daddr = adult_dns;
-            ip_header->check = 0;
-            ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
-        }
+        if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) 
+            ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);
+        if (current_settings.ad_block_enabled && !current_settings.adult_content_enabled)
+            ip_header->daddr = in_aton(ADGUARD_DNS);
+        if (current_settings.adult_content_enabled && !current_settings.ad_block_enabled)
+            ip_header->daddr = in_aton(CLOUDFLARE_DNS);
+        return NF_ACCEPT;
     }
 
     return NF_ACCEPT;
