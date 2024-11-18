@@ -2,7 +2,7 @@
 
 /* Global variables */
 static DEFINE_HASHTABLE(domain_cache, HASH_SIZE);
-static DEFINE_SPINLOCK(cache_lock);
+DEFINE_SPINLOCK(cache_lock);
 static struct settings_cache settings;
 
 /* Simple but effective domain hash function */

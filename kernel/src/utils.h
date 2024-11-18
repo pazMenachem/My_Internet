@@ -7,6 +7,7 @@
 #define MAX_DOMAIN_LENGTH       256
 #define MAX_PAYLOAD             1024
 #define SERVER_PORT             65433
+#define SERVER_IP               "127.0.0.1"
 
 // Message codes matching server's utils.py
 #define CODE_AD_BLOCK           "50"
