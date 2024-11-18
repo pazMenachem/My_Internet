@@ -28,6 +28,21 @@
 #define HASH_SIZE 8  // 2^8 = 256 buckets
 #define MAX_DOMAIN_LENGTH 256
 
+// Message codes matching server's utils.py
+#define CODE_AD_BLOCK           "50"
+#define CODE_ADULT_BLOCK        "51"
+#define CODE_ADD_DOMAIN         "52"
+#define CODE_REMOVE_DOMAIN      "53"
+#define CODE_DOMAIN_LIST_UPDATE "54"
+#define CODE_INIT_SETTINGS      "55"
+#define CODE_SUCCESS            "100"
+#define CODE_ERROR             "101"
+
+// JSON field names matching server's utils.py
+#define STR_CODE       "code"
+#define STR_CONTENT    "content"
+#define STR_OPERATION  "operation"
+
 // DNS structures
 struct dns_header {
     __u16 id;

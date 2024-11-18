@@ -20,7 +20,45 @@ class Server:
         self.request_factory = RequestFactory(self.db_manager)
         self.running = True
         self.logger = setup_logger(__name__)
+        self.kernel_writer: Optional[asyncio.StreamWriter] = None
         self.logger.info("Server initialized")
+
+    async def notify_kernel(self, notification: Dict[str, Any]) -> None:
+        """Send notification to kernel if connected."""
+        if self.kernel_writer:
+            try:
+                self.kernel_writer.write(json.dumps(notification).encode() + b'\n')
+                await self.kernel_writer.drain()
+                self.logger.debug(f"Kernel notified: {notification}")
+            except Exception as e:
+                self.logger.error(f"Failed to notify kernel: {e}")
+
+    async def handle_kernel_requests(
+        self,
+        reader: asyncio.StreamReader,
+        writer: asyncio.StreamWriter
+    ) -> None:
+        """Handle kernel connection and send initial settings."""
+        addr = writer.get_extra_info('peername')
+        self.logger.info(f"Kernel module connected from {addr}")
+        self.kernel_writer = writer
+        
+        try:
+            # Send initial settings using existing method
+            initial_settings = self._get_initial_settings()
+            await self.notify_kernel(initial_settings)
+
+            # Keep connection alive
+            while self.running:
+                await asyncio.sleep(1)
+
+        except Exception as e:
+            self.logger.error(f"Kernel connection error: {e}")
+        finally:
+            self.kernel_writer = None
+            writer.close()
+            await writer.wait_closed()
+            self.logger.info(f"Kernel connection closed for {addr}")
 
     def handle_client_thread(self) -> None:
         """Handle client connections using traditional socket."""
@@ -58,6 +96,10 @@ class Server:
                                     conn.send(json.dumps(response).encode() + b'\n')
                                     self.logger.debug(f"Sent response: {response}")
 
+                                    # Add kernel notification for successful operations
+                                    if response.get(STR_CODE) == Codes.CODE_SUCCESS:
+                                        asyncio.run(self.notify_kernel(response))
+
                                 except json.JSONDecodeError:
                                     self.logger.error("Invalid JSON format received")
                                     conn.send(json.dumps(invalid_json_response()).encode() + b'\n')
@@ -78,66 +120,6 @@ class Server:
 
         finally:
             client_socket.close()
-
-    async def handle_kernel_requests(
-        self,
-        reader: asyncio.StreamReader,
-        writer: asyncio.StreamWriter
-    ) -> None:
-        """Handle kernel requests using asyncio for better performance."""
-        addr = writer.get_extra_info('peername')
-        self.logger.info(f"Kernel module connected from {addr}")
-        
-        try:
-            while True:
-                data = await reader.readline()
-                if not data:
-                    break
-
-                request_data = json.loads(data.decode())
-                domain = request_data.get(STR_DOMAIN, '').strip()
-                
-                if not domain:
-                    continue
-
-                ad_block_enabled = self.db_manager.get_setting(STR_AD_BLOCK) == STR_TOGGLE_ON
-                adult_block_enabled = self.db_manager.get_setting(STR_ADULT_BLOCK) == STR_TOGGLE_ON
-
-                block_reason = None
-                should_block = False
-                
-                if self.db_manager.is_domain_blocked(domain):
-                    should_block = True
-                    block_reason = "custom_blocklist"
-                    self.logger.info(f"Domain {domain} blocked (custom blocklist)")
-                
-                elif ad_block_enabled and request_data.get('is_ad', False):
-                    should_block = True
-                    block_reason = "ads"
-                    self.logger.info(f"Domain {domain} blocked (ads)")
-                
-                elif adult_block_enabled and 'adult' in request_data.get('categories', []):
-                    should_block = True
-                    block_reason = "adult_content"
-                    self.logger.info(f"Domain {domain} blocked (adult content)")
-
-                response = {
-                    'block': should_block,
-                    'reason': block_reason or 'allowed',
-                    'domain': domain
-                }
-                
-                self.logger.debug(f"Domain check result: {domain} -> {'blocked' if should_block else 'allowed'} ({block_reason or 'no reason'})")
-                
-                writer.write(json.dumps(response).encode() + b'\n')
-                await writer.drain()
-
-        except Exception as e:
-            self.logger.error(f"Kernel error: {e}")
-        finally:
-            writer.close()
-            await writer.wait_closed()
-            self.logger.info(f"Kernel connection closed for {addr}")
 
     async def start_server(self) -> None:
         """Run both client and kernel handlers."""
