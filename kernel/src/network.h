@@ -5,6 +5,7 @@
 #include <linux/socket.h>
 #include <linux/tcp.h>
 #include <net/netfilter/nf_socket.h>
+#include <linux/inet.h>
 #include "utils.h"
 #include "cache.h"
 

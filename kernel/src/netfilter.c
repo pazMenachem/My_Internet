@@ -119,9 +119,9 @@ static unsigned int local_out_hook(void *priv,
         if (!udp || ntohs(udp->dest) != 53)
             return NF_ACCEPT;
 
-        spin_lock(&cache_lock);
-        current_settings = settings;
-        spin_unlock(&cache_lock);
+        spin_lock(&__cache_lock);
+        current_settings = __settings;
+        spin_unlock(&__cache_lock);
 
         // Get current DNS server based on settings
         if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {

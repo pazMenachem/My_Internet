@@ -3,7 +3,7 @@
 
 #include <linux/types.h>
 
-#define HASH_SIZE               8
+#define __HASH_SIZE               8
 #define MAX_DOMAIN_LENGTH       256
 #define MAX_PAYLOAD             1024
 #define SERVER_PORT             65433

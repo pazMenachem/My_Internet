@@ -1,9 +1,9 @@
 #include "cache.h"
 
 /* Global variables */
-static DEFINE_HASHTABLE(domain_cache, HASH_SIZE);
-DEFINE_SPINLOCK(cache_lock);
-static struct settings_cache settings;
+DEFINE_HASHTABLE(domain_cache, __HASH_SIZE);
+DEFINE_SPINLOCK(__cache_lock);
+struct settings_cache __settings;
 
 /* Simple but effective domain hash function */
 static unsigned int hash_domain(const char *domain)
@@ -34,7 +34,7 @@ bool is_domain_blocked(const char *domain) {
 }
 
 void add_domain_to_cache(const char *domain) {
-    struct domain_entry *entry;
+    struct domain_entry *entry = NULL;
     unsigned int hash = hash_domain(domain);
 
     entry = kmalloc(sizeof(*entry), GFP_KERNEL);
@@ -47,9 +47,9 @@ void add_domain_to_cache(const char *domain) {
         return;
     }
 
-    spin_lock(&cache_lock);
+    spin_lock(&__cache_lock);
     hash_add_rcu(domain_cache, &entry->node, hash);
-    spin_unlock(&cache_lock);
+    spin_unlock(&__cache_lock);
 }
 
 void remove_domain_from_cache(const char *domain) {
@@ -58,7 +58,7 @@ void remove_domain_from_cache(const char *domain) {
     struct hlist_node *tmp;
     struct domain_entry *found_entry = NULL;
 
-    spin_lock(&cache_lock);
+    spin_lock(&__cache_lock);
     hash_for_each_possible_safe(domain_cache, entry, tmp, node, hash) {
         if (strcmp(entry->domain, domain) == 0) {
             hash_del_rcu(&entry->node);
@@ -66,7 +66,7 @@ void remove_domain_from_cache(const char *domain) {
             break;
         }
     }
-    spin_unlock(&cache_lock);
+    spin_unlock(&__cache_lock);
 
     if (found_entry) {
         synchronize_rcu();
@@ -76,16 +76,16 @@ void remove_domain_from_cache(const char *domain) {
 }
 
 void update_settings(bool ad_block, bool adult_block) {
-    spin_lock(&cache_lock);
-    settings.ad_block_enabled = ad_block;
-    settings.adult_content_enabled = adult_block;
-    spin_unlock(&cache_lock);
+    spin_lock(&__cache_lock);
+    __settings.ad_block_enabled = ad_block;
+    __settings.adult_content_enabled = adult_block;
+    spin_unlock(&__cache_lock);
 }
 
 int init_cache(void) {
     hash_init(domain_cache);
-    settings.ad_block_enabled = false;
-    settings.adult_content_enabled = false;
+    __settings.ad_block_enabled = false;
+    __settings.adult_content_enabled = false;
     return 0;
 }
 
@@ -94,11 +94,11 @@ void cleanup_cache(void) {
     struct hlist_node *tmp;
     unsigned int bkt;
 
-    spin_lock(&cache_lock);
+    spin_lock(&__cache_lock);
     hash_for_each_safe(domain_cache, bkt, tmp, entry, node) {
         hash_del(&entry->node);
         kfree(entry->domain);
         kfree(entry);
     }
-    spin_unlock(&cache_lock);
+    spin_unlock(&__cache_lock);
 }

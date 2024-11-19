@@ -8,6 +8,9 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
+extern struct settings_cache __settings;
+extern spinlock_t __cache_lock;
+
 /* Cache structures */
 struct domain_entry {
     struct hlist_node node;
@@ -86,8 +89,5 @@ int init_cache(void);
  * Context: Process context only
  */
 void cleanup_cache(void);
-
-extern struct settings_cache settings;
-extern spinlock_t cache_lock;
 
 #endif /* CACHE_H */ 

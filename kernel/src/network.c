@@ -29,7 +29,7 @@ static bool handle_ad_block_settings(const char *buffer) {
     const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
     if (content) {
         bool enabled = strstr(content, "on") != NULL;
-        update_settings(enabled, settings.adult_content_enabled);
+        update_settings(enabled, __settings.adult_content_enabled);
         printk(KERN_INFO "Network Filter: Ad blocking %s\n", 
                enabled ? "enabled" : "disabled");
     }
@@ -44,7 +44,7 @@ static bool handle_adult_content_settings(const char *buffer) {
     const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
     if (content) {
         bool enabled = strstr(content, "on") != NULL;
-        update_settings(settings.ad_block_enabled, enabled);
+        update_settings(__settings.ad_block_enabled, enabled);
         printk(KERN_INFO "Network Filter: Adult content blocking %s\n", 
                enabled ? "enabled" : "disabled");
     }

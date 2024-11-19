@@ -7,6 +7,7 @@
 #include <linux/udp.h>
 #include <linux/skbuff.h>
 #include <linux/types.h>
+#include <linux/inet.h>
 #include "utils.h"
 #include "cache.h"
 
