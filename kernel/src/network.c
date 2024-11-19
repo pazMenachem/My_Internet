@@ -18,7 +18,19 @@ static bool module_running = true;
  * Return: 0 on success, negative on error
  */
 static bool validate_message(const char *buffer) {
-    return strstr(buffer, "\"" STR_CODE "\":\"" CODE_SUCCESS "\"") != NULL;
+    printk(KERN_DEBUG MODULE_NAME ": Validating message: %s\n", buffer);
+    
+    // More flexible validation that ignores whitespace
+    char code_pattern[32];
+    snprintf(code_pattern, sizeof(code_pattern), "\"%s\"", CODE_SUCCESS);
+    
+    const char *code_pos = strstr(buffer, code_pattern);
+    bool valid = (code_pos != NULL);
+    
+    printk(KERN_DEBUG MODULE_NAME ": Looking for code pattern: %s\n", code_pattern);
+    printk(KERN_DEBUG MODULE_NAME ": Message validation result: %s\n", valid ? "valid" : "invalid");
+    
+    return valid;
 }
 
 static bool handle_ad_block_settings(const char *buffer) {
@@ -130,16 +142,30 @@ static bool handle_initial_settings(const char *buffer) {
 }
 
 static int get_operation_code(const char *buffer) {
-    const char *op_str = strstr(buffer, "\"" STR_OPERATION "\":\"");
+    const char *op_str = strstr(buffer, "\"" STR_OPERATION "\":");
     if (!op_str) {
+        printk(KERN_DEBUG MODULE_NAME ": Operation field not found\n");
         return -1;
     }
-    op_str += strlen("\"" STR_OPERATION "\":\"");
+    
+    // Skip to the actual value
+    op_str = strchr(op_str, ':');
+    if (!op_str) {
+        printk(KERN_DEBUG MODULE_NAME ": Malformed operation field\n");
+        return -1;
+    }
+    
+    // Skip whitespace and quotes
+    while (*op_str && (*op_str == ':' || *op_str == ' ' || *op_str == '"'))
+        op_str++;
     
     int code;
     if (kstrtoint(op_str, 10, &code) != 0) {
+        printk(KERN_DEBUG MODULE_NAME ": Failed to parse operation code\n");
         return -1;
     }
+    
+    printk(KERN_DEBUG MODULE_NAME ": Successfully parsed operation code: %d\n", code);
     return code;
 }
 
@@ -187,10 +213,12 @@ static int connection_handler(void *data) {
         iov.iov_base = buffer;
         iov.iov_len = MAX_PAYLOAD - 1;
 
-        printk(KERN_DEBUG MODULE_NAME ": listening...\n");
+        if (server_socket)
+            printk(KERN_DEBUG MODULE_NAME ": listening...\n");
         ret = kernel_recvmsg(sock, &msg, &iov, 1, MAX_PAYLOAD - 1, 0);
         if (ret > 0) {
             buffer[ret] = '\0';
+            printk(KERN_DEBUG MODULE_NAME ": Received message from server: %s\n", buffer);
             process_server_message(buffer);
         }
         else if (ret < 0) {
