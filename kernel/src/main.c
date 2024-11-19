@@ -14,27 +14,27 @@ MODULE_VERSION("1.0");
 static int __init network_filter_init(void) {
     int ret;
 
-    printk(KERN_INFO "Network Filter: Initializing module\n");
+    printk(KERN_INFO MODULE_NAME ": Initializing module\n");
 
     ret = init_cache();
     if (ret < 0) {
-        printk(KERN_ERR "Network Filter: Failed to initialize cache\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to initialize cache\n");
         goto fail;
     }
 
     ret = init_netfilter();
     if (ret < 0) {
-        printk(KERN_ERR "Network Filter: Failed to initialize netfilter\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to initialize netfilter\n");
         goto fail_netfilter;
     }
 
     ret = init_network();
     if (ret < 0) {
-        printk(KERN_ERR "Network Filter: Failed to initialize network\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to initialize network\n");
         goto fail_network;
     }
 
-    printk(KERN_INFO "Network Filter: Module initialized successfully\n");
+    printk(KERN_INFO MODULE_NAME ": Module initialized successfully\n");
     return 0;
 
 fail_network:   cleanup_netfilter();
@@ -43,11 +43,11 @@ fail:           return ret;
 }
 
 static void __exit network_filter_exit(void) {
-    printk(KERN_INFO "Network Filter: Cleaning up module\n");
+    printk(KERN_INFO MODULE_NAME ": Cleaning up module\n");
     cleanup_network();
     cleanup_netfilter();
     cleanup_cache();
-    printk(KERN_INFO "Network Filter: Module cleanup complete\n");
+    printk(KERN_INFO MODULE_NAME ": Module cleanup complete\n");
 }
 
 module_init(network_filter_init);

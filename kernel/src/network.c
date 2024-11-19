@@ -22,30 +22,25 @@ static bool validate_message(const char *buffer) {
 }
 
 static bool handle_ad_block_settings(const char *buffer) {
-    if (!strstr(buffer, "\"" STR_OPERATION "\":\"" CODE_AD_BLOCK "\"")) {
+    if (!strstr(buffer, "\"" STR_OPERATION "\":\"" CODE_AD_BLOCK "\""))
         return false;
-    }
-
+    
     const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
     if (content) {
         bool enabled = strstr(content, "on") != NULL;
         update_settings(enabled, __settings.adult_content_enabled);
-        printk(KERN_INFO "Network Filter: Ad blocking %s\n", 
+        printk(KERN_INFO MODULE_NAME ": Ad blocking %s\n", 
                enabled ? "enabled" : "disabled");
     }
     return true;
 }
 
 static bool handle_adult_content_settings(const char *buffer) {
-    if (!strstr(buffer, "\"" STR_OPERATION "\":\"" CODE_ADULT_BLOCK "\"")) {
-        return false;
-    }
-
     const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
     if (content) {
         bool enabled = strstr(content, "on") != NULL;
         update_settings(__settings.ad_block_enabled, enabled);
-        printk(KERN_INFO "Network Filter: Adult content blocking %s\n", 
+        printk(KERN_INFO MODULE_NAME ": Adult content blocking %s\n", 
                enabled ? "enabled" : "disabled");
     }
     return true;
@@ -64,58 +59,116 @@ static bool extract_domain(const char *content, char *domain, size_t max_len) {
 }
 
 static bool handle_domain_operation(const char *buffer, bool is_add) {
-    const char *operation = is_add ? CODE_ADD_DOMAIN : CODE_REMOVE_DOMAIN;
-    if (!strstr(buffer, "\"" STR_OPERATION "\":\"")) {
-        return false;
-    }
-
     char domain[MAX_DOMAIN_LENGTH];
     const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
     
     if (extract_domain(content, domain, MAX_DOMAIN_LENGTH)) {
-        if (is_add) {
+        if (is_add) 
             add_domain_to_cache(domain);
-            printk(KERN_INFO "Network Filter: Added domain %s\n", domain);
-        } else {
+        else 
             remove_domain_from_cache(domain);
-            printk(KERN_INFO "Network Filter: Removed domain %s\n", domain);
-        }
+        
         return true;
     }
     return false;
 }
 
-static bool handle_initial_settings(const char *buffer) {
-    if (!strstr(buffer, "\"" STR_OPERATION "\":\"" CODE_INIT_SETTINGS "\"")) {
+static bool parse_settings(const char *buffer) {
+    const char *settings = strstr(buffer, "\"" STR_SETTINGS "\":");
+    if (!settings) {
+        printk(KERN_WARNING MODULE_NAME ": Settings object not found\n");
         return false;
     }
 
-    const char *content = strstr(buffer, "\"" STR_CONTENT "\":");
-    if (content) {
-        bool ad_block = strstr(content, "\"" STR_AD_BLOCK "\":\"on\"") != NULL;
-        bool adult_block = strstr(content, "\"" STR_ADULT_BLOCK "\":\"on\"") != NULL;
-        update_settings(ad_block, adult_block);
-        printk(KERN_INFO "Network Filter: Initial settings - Ad block: %s, Adult block: %s\n",
-               ad_block ? "on" : "off", adult_block ? "on" : "off");
-        return true;
+    bool ad_block = strstr(settings, "\"" STR_AD_BLOCK "\":\"on\"") != NULL;
+    bool adult_block = strstr(settings, "\"" STR_ADULT_BLOCK "\":\"on\"") != NULL;
+    update_settings(ad_block, adult_block);
+    
+    return true;
+}
+
+static bool parse_domains(const char *buffer) {
+    const char *domains = strstr(buffer, "\"" STR_DOMAINS "\":[");
+    if (!domains) {
+        printk(KERN_WARNING MODULE_NAME ": Domains array not found\n");
+        return false;
     }
-    return false;
+
+    domains += strlen("\"" STR_DOMAINS "\":[");
+
+    char domain[MAX_DOMAIN_LENGTH];
+    const char *start = domains;
+    const char *end;
+    int count_domains = 0;
+
+    while ((start = strchr(start, '"')) != NULL) {
+        start++; // Skip opening quote
+        end = strchr(start, '"');
+        if (!end) break;
+
+        size_t len = end - start;
+        if (len >= MAX_DOMAIN_LENGTH) {
+            printk(KERN_WARNING MODULE_NAME ": Domain too long, skipping\n");
+            start = end + 1;
+            continue;
+        }
+
+        memcpy(domain, start, len);
+        domain[len] = '\0';
+        add_domain_to_cache(domain);
+        
+        start = end + 1;
+        count_domains++;
+    }
+
+    printk(KERN_INFO MODULE_NAME ": Initialized with %d domains\n", count_domains);
+    return true;
+}
+
+static bool handle_initial_settings(const char *buffer) {
+    return parse_settings(buffer) && parse_domains(buffer);
+}
+
+static int get_operation_code(const char *buffer) {
+    const char *op_str = strstr(buffer, "\"" STR_OPERATION "\":\"");
+    if (!op_str) {
+        return -1;
+    }
+    op_str += strlen("\"" STR_OPERATION "\":\"");
+    
+    int code;
+    if (kstrtoint(op_str, 10, &code) != 0) {
+        return -1;
+    }
+    return code;
 }
 
 static int process_server_message(const char *buffer) {
-    if (!validate_message(buffer)) {
+    printk(KERN_DEBUG MODULE_NAME ": Processing message: %s\n", buffer);
+    if (!validate_message(buffer))
         return 0;
-    }
+    printk(KERN_DEBUG MODULE_NAME ": Operation code: %d\n", get_operation_code(buffer));
+    int op = get_operation_code(buffer);
+    switch (op) {
+        case CODE_AD_BLOCK_INT:
+            return handle_ad_block_settings(buffer) ? 0 : -EINVAL;
+            
+        case CODE_ADULT_BLOCK_INT:
+            return handle_adult_content_settings(buffer) ? 0 : -EINVAL;
+            
+        case CODE_ADD_DOMAIN_INT:
+            return handle_domain_operation(buffer, true) ? 0 : -EINVAL;
+            
+        case CODE_REMOVE_DOMAIN_INT:
+            return handle_domain_operation(buffer, false) ? 0 : -EINVAL;
+            
+        case CODE_INIT_SETTINGS_INT:
+            return handle_initial_settings(buffer) ? 0 : -EINVAL;
 
-    if (handle_ad_block_settings(buffer)        ||
-        handle_adult_content_settings(buffer)   ||
-        handle_domain_operation(buffer, true)   ||  // Add domain
-        handle_domain_operation(buffer, false)  ||  // Remove domain
-        handle_initial_settings(buffer)) {
-        return 0;
+        default:
+            printk(KERN_WARNING MODULE_NAME ": Invalid or unhandled operation code: %d\n", op);
+            return -EINVAL;
     }
-
-    return -EINVAL;  // Invalid or unhandled message type
 }
 
 static int connection_handler(void *data) {
@@ -134,12 +187,14 @@ static int connection_handler(void *data) {
         iov.iov_base = buffer;
         iov.iov_len = MAX_PAYLOAD - 1;
 
+        printk(KERN_DEBUG MODULE_NAME ": listening...\n");
         ret = kernel_recvmsg(sock, &msg, &iov, 1, MAX_PAYLOAD - 1, 0);
         if (ret > 0) {
             buffer[ret] = '\0';
             process_server_message(buffer);
         }
         else if (ret < 0) {
+            printk(KERN_ERR MODULE_NAME ": Connection error: %d\n", ret);
             break;
         }
     }
@@ -154,7 +209,7 @@ int init_network(void) {
 
     ret = sock_create(AF_INET, SOCK_STREAM, IPPROTO_TCP, &server_socket);
     if (ret < 0) {
-        printk(KERN_ERR "Network Filter: Failed to create socket\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to create socket\n");
         return ret;
     }
 
@@ -166,17 +221,18 @@ int init_network(void) {
     ret = kernel_connect(server_socket, (struct sockaddr *)&server_addr, 
                         sizeof(server_addr), 0);
     if (ret < 0) {
-        printk(KERN_ERR "Network Filter: Failed to connect to server\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to connect to server\n");
         sock_release(server_socket);
         return ret;
     }
 
-    connection_thread = kthread_run(connection_handler, NULL, "Network Filter_conn");
+    connection_thread = kthread_run(connection_handler, NULL, MODULE_NAME "_conn");
     if (IS_ERR(connection_thread)) {
-        printk(KERN_ERR "Network Filter: Failed to create connection thread\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to create connection thread\n");
         sock_release(server_socket);
         return PTR_ERR(connection_thread);
     }
+    printk(KERN_INFO MODULE_NAME ": Network initialized\n");
 
     return 0;
 }
@@ -187,4 +243,5 @@ void cleanup_network(void) {
         kthread_stop(connection_thread);
     if (server_socket)
         sock_release(server_socket);
+    printk(KERN_INFO MODULE_NAME ": Network cleaned up\n");
 }

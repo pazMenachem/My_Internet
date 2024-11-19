@@ -1,5 +1,5 @@
-# Kernel module name
-MODULE_NAME = Network_Filter
+# Extract module name from utils.h with simpler shell command
+MODULE_NAME := $(shell grep "define MODULE_NAME" $(PWD)/src/utils.h | cut -d'"' -f2)
 
 # Source files
 obj-m := $(MODULE_NAME).o
@@ -27,4 +27,7 @@ install:
 remove:
 	sudo rmmod $(MODULE_NAME)
 
-.PHONY: all clean install remove
+read:
+	sudo dmesg | grep $(MODULE_NAME)
+
+.PHONY: all clean install remove read

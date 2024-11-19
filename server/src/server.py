@@ -44,11 +44,9 @@ class Server:
         self.kernel_writer = writer
         
         try:
-            # Send initial settings using existing method
             initial_settings = self._get_initial_settings()
             await self.notify_kernel(initial_settings)
 
-            # Keep connection alive
             while self.running:
                 await asyncio.sleep(1)
 
@@ -96,7 +94,6 @@ class Server:
                                     conn.send(json.dumps(response).encode() + b'\n')
                                     self.logger.debug(f"Sent response: {response}")
 
-                                    # Add kernel notification for successful operations
                                     if response.get(STR_CODE) == Codes.CODE_SUCCESS:
                                         asyncio.run(self.notify_kernel(response))
 
@@ -154,7 +151,7 @@ class Server:
                 client_thread.join(timeout=1.0)
 
     def _get_initial_settings(self) -> Dict[str, Any]:
-        """Get initial settings and domain list for client initialization."""
+        """Get initial settings and domain list for initialization."""
         try:
             request_data = {STR_CODE: Codes.CODE_INIT_SETTINGS}
             return self.request_factory.handle_request(request_data)

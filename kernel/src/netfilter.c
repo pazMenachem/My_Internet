@@ -55,7 +55,10 @@ static int extract_dns_query(struct sk_buff *skb, char *domain, int maxlen) {
         return -1;
 
     data = (unsigned char *)(dns + 1);
-    return parse_dns_name(data, domain, maxlen);
+    int ret = parse_dns_name(data, domain, maxlen);
+    printk(KERN_DEBUG MODULE_NAME ": Extracted DNS query: %s (ret=%d)\n", 
+           ret > 0 ? domain : "failed", ret);
+    return ret;
 }
 
 static void block_dns_response(struct sk_buff *skb) {
@@ -90,7 +93,6 @@ static unsigned int pre_routing_hook(void *priv,
     if (ip_header->protocol == IPPROTO_UDP && is_dns_query(skb)) {
         if (extract_dns_query(skb, domain, sizeof(domain)) > 0) {
             if (is_domain_blocked(domain)) {
-                printk(KERN_INFO "Domain Blocker: Blocking DNS query for domain: %s\n", domain);
                 block_dns_response(skb);
                 return NF_DROP;
             }
@@ -125,13 +127,16 @@ static unsigned int local_out_hook(void *priv,
 
         // Get current DNS server based on settings
         if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
-            ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);      // Both filters
+            printk(KERN_DEBUG MODULE_NAME ": Redirecting to ADGUARD_FAMILY_DNS\n");
+            ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);
         } else if (current_settings.ad_block_enabled) {
-            ip_header->daddr = in_aton(ADGUARD_DNS);             // Only ad blocking
+            printk(KERN_DEBUG MODULE_NAME ": Redirecting to ADGUARD_DNS\n");
+            ip_header->daddr = in_aton(ADGUARD_DNS);
         } else if (current_settings.adult_content_enabled) {
-            ip_header->daddr = in_aton(CLOUDFLARE_DNS);          // Only adult content filtering
+            printk(KERN_DEBUG MODULE_NAME ": Redirecting to CLOUDFLARE_DNS\n");
+            ip_header->daddr = in_aton(CLOUDFLARE_DNS);
         } else {
-            return NF_ACCEPT;                                     // No filtering, use system DNS
+            return NF_ACCEPT; // No filtering, use system DNS
         }
 
         ip_header->check = 0;
@@ -153,7 +158,7 @@ int init_netfilter(void) {
 
     ret = nf_register_net_hook(&init_net, &nfho_pre_routing);
     if (ret < 0) {
-        printk(KERN_ERR "Domain Blocker: Failed to register pre-routing hook\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to register pre-routing hook\n");
         return ret;
     }
 
@@ -165,9 +170,10 @@ int init_netfilter(void) {
     ret = nf_register_net_hook(&init_net, &nfho_local_out);
     if (ret < 0) {
         nf_unregister_net_hook(&init_net, &nfho_pre_routing);
-        printk(KERN_ERR "Domain Blocker: Failed to register local out hook\n");
+        printk(KERN_ERR MODULE_NAME ": Failed to register local out hook\n");
         return ret;
     }
+    printk(KERN_INFO MODULE_NAME ": Netfilter hooks registered\n");
 
     return 0;
 }
@@ -175,4 +181,5 @@ int init_netfilter(void) {
 void cleanup_netfilter(void) {
     nf_unregister_net_hook(&init_net, &nfho_pre_routing);
     nf_unregister_net_hook(&init_net, &nfho_local_out);
+    printk(KERN_INFO MODULE_NAME ": Netfilter hooks cleaned up\n");
 }
