@@ -6,7 +6,7 @@ from .utils import (
     STR_CODE, STR_CONTENT, STR_DOMAINS,
     STR_DOMAIN_BLOCKED_MSG, STR_DOMAIN_NOT_FOUND_MSG,
     STR_DOMAIN_UNBLOCKED_MSG, STR_OPERATION,
-    invalid_json_response
+    STR_SETTINGS,invalid_json_response
 )
 from .logger import setup_logger
 
