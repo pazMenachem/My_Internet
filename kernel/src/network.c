@@ -142,26 +142,38 @@ static bool handle_initial_settings(const char *buffer) {
 }
 
 static int get_operation_code(const char *buffer) {
+    printk(KERN_DEBUG MODULE_NAME ": Parsing operation from: %s\n", buffer);
+    
     const char *op_str = strstr(buffer, "\"" STR_OPERATION "\":");
     if (!op_str) {
         printk(KERN_DEBUG MODULE_NAME ": Operation field not found\n");
         return -1;
     }
     
-    // Skip to the actual value
+    // Skip to the value
     op_str = strchr(op_str, ':');
     if (!op_str) {
         printk(KERN_DEBUG MODULE_NAME ": Malformed operation field\n");
         return -1;
     }
     
-    // Skip whitespace and quotes
+    // Skip whitespace and first quote
     while (*op_str && (*op_str == ':' || *op_str == ' ' || *op_str == '"'))
         op_str++;
     
+    // Now we should be at the number
+    char num_str[8] = {0};  // Buffer for the number
+    int i = 0;
+    
+    // Copy until we hit a quote or other non-digit
+    while (i < 7 && op_str[i] >= '0' && op_str[i] <= '9') {
+        num_str[i] = op_str[i];
+        i++;
+    }
+    
     int code;
-    if (kstrtoint(op_str, 10, &code) != 0) {
-        printk(KERN_DEBUG MODULE_NAME ": Failed to parse operation code\n");
+    if (kstrtoint(num_str, 10, &code) != 0) {
+        printk(KERN_DEBUG MODULE_NAME ": Failed to parse operation code from: %s\n", num_str);
         return -1;
     }
     
@@ -171,24 +183,34 @@ static int get_operation_code(const char *buffer) {
 
 static int process_server_message(const char *buffer) {
     printk(KERN_DEBUG MODULE_NAME ": Processing message: %s\n", buffer);
-    if (!validate_message(buffer))
+    
+    if (!validate_message(buffer)) {
+        printk(KERN_WARNING MODULE_NAME ": Message validation failed\n");
         return 0;
-    printk(KERN_DEBUG MODULE_NAME ": Operation code: %d\n", get_operation_code(buffer));
+    }
+    
     int op = get_operation_code(buffer);
+    printk(KERN_DEBUG MODULE_NAME ": Operation code: %d\n", op);
+    
     switch (op) {
         case CODE_AD_BLOCK_INT:
+            printk(KERN_DEBUG MODULE_NAME ": Handling ad block settings\n");
             return handle_ad_block_settings(buffer) ? 0 : -EINVAL;
             
         case CODE_ADULT_BLOCK_INT:
+            printk(KERN_DEBUG MODULE_NAME ": Handling adult content settings\n");
             return handle_adult_content_settings(buffer) ? 0 : -EINVAL;
             
         case CODE_ADD_DOMAIN_INT:
+            printk(KERN_DEBUG MODULE_NAME ": Handling add domain\n");
             return handle_domain_operation(buffer, true) ? 0 : -EINVAL;
             
         case CODE_REMOVE_DOMAIN_INT:
+            printk(KERN_DEBUG MODULE_NAME ": Handling remove domain\n");
             return handle_domain_operation(buffer, false) ? 0 : -EINVAL;
             
         case CODE_INIT_SETTINGS_INT:
+            printk(KERN_DEBUG MODULE_NAME ": Handling initial settings\n");
             return handle_initial_settings(buffer) ? 0 : -EINVAL;
 
         default:
