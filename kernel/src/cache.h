@@ -1,12 +1,13 @@
 #ifndef CACHE_H
 #define CACHE_H
 
-#include "utils.h"
 #include <linux/hashtable.h>
 #include <linux/spinlock.h>
 #include <linux/rculist.h>
 #include <linux/slab.h>
 #include <linux/string.h>
+#include "utils.h"
+#include "json_parser.h"
 
 extern struct settings_cache __settings;
 extern spinlock_t __cache_lock;
@@ -89,5 +90,36 @@ int init_cache(void);
  * Context: Process context only
  */
 void cleanup_cache(void);
+
+/**
+ * update_ad_block_setting - Update ad blocking setting
+ * @enabled: true to enable, false to disable
+ */
+void update_ad_block_setting(bool enabled);
+
+/**
+ * update_adult_block_setting - Update adult content blocking setting
+ * @enabled: true to enable, false to disable
+ */
+void update_adult_block_setting(bool enabled);
+
+/**
+ * parse_domains - Parse domains from JSON string
+ * @buffer: JSON string containing domains
+ * @example: "["example.com", "example.org"]"
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int parse_domains(const char *buffer);
+
+/**
+ * parse_settings_values - Parse settings values from JSON string
+ * @settings: JSON string containing settings
+ * @settings_len: Length of the JSON string
+ * @example: "{"ad_block":"on","adult_block":"off"}"
+ *
+ * Return: 0 on success, negative error code on failure
+ */
+int parse_settings_values(const char *settings, size_t settings_len);
 
 #endif /* CACHE_H */ 

@@ -93,6 +93,24 @@ void update_settings(bool ad_block, bool adult_block) {
            ad_block ? "on" : "off", adult_block ? "on" : "off");
 }
 
+void update_ad_block_setting(bool enabled) {
+    spin_lock(&__cache_lock);
+    __settings.ad_block_enabled = enabled;
+    spin_unlock(&__cache_lock);
+
+    printk(KERN_INFO MODULE_NAME ": Ad blocking %s\n", 
+           enabled ? "enabled" : "disabled");
+}
+
+void update_adult_block_setting(bool enabled) {
+    spin_lock(&__cache_lock);
+    __settings.adult_content_enabled = enabled;
+    spin_unlock(&__cache_lock);
+
+    printk(KERN_INFO MODULE_NAME ": Adult content blocking %s\n", 
+           enabled ? "enabled" : "disabled");
+}
+
 int init_cache(void) {
     hash_init(domain_cache);
     __settings.ad_block_enabled = false;
@@ -116,4 +134,69 @@ void cleanup_cache(void) {
     }
     spin_unlock(&__cache_lock);
     printk(KERN_INFO MODULE_NAME ": Cleaned up %d cache entries\n", count);
+}
+
+int parse_domains(const char *buffer) {
+    const char *value_start;
+    size_t value_len;
+    int ret = get_json_value(buffer, STR_DOMAINS, &value_start, &value_len);
+    
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to find domains array: %d\n", ret);
+        return ret;
+    }
+
+    char domain[MAX_DOMAIN_LENGTH];
+    value_start++;
+    const char *end;
+    int count_domains = 0;
+
+    while (*value_start != ']') {
+        value_start++; // Skip opening quote
+        end = strchr(value_start, '"');
+        if (!end) break;
+
+        size_t len = end - value_start;
+        if (len >= MAX_DOMAIN_LENGTH) {
+            printk(KERN_WARNING MODULE_NAME ": Domain too long, skipping\n");
+            value_start = end + 1;
+            continue;
+        }
+
+        memcpy(domain, value_start, len);
+        domain[len] = '\0';
+        add_domain_to_cache(domain);
+        
+        value_start = end + 1;
+        count_domains++;
+    }
+
+    printk(KERN_INFO MODULE_NAME ": Initialized with %d domains\n", count_domains);
+    return count_domains;
+}
+
+int parse_settings_values(const char *settings, size_t settings_len) {
+    const char *value_start;
+    size_t value_len;
+    bool ad_block = false;
+    bool adult_block = false;
+
+    int ret_ad_block = get_json_value(settings, STR_AD_BLOCK, &value_start, &value_len);
+    if (ret_ad_block < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to parse %s: %d\n", STR_AD_BLOCK, ret_ad_block);
+        return ret_ad_block;
+    }
+
+    ad_block = value_len == 2; // "on" | "off"
+
+    int ret_adult_block = get_json_value(settings, STR_ADULT_BLOCK, &value_start, &value_len);
+    if (ret_adult_block < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to parse %s: %d\n", STR_ADULT_BLOCK, ret_adult_block);
+        return ret_adult_block;
+    }
+
+    adult_block = value_len == 2; // "on" | "off"
+
+    update_settings(ad_block, adult_block);
+    return 0;
 }

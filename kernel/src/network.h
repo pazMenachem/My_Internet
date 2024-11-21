@@ -8,6 +8,7 @@
 #include <linux/inet.h>
 #include "utils.h"
 #include "cache.h"
+#include "json_parser.h"
 
 /**
  * init_network - Initialize network connection to management server

@@ -26,7 +26,7 @@ class AdBlockHandler(RequestHandler):
                 self.logger.info(f"Ad blocking turned {state}")
                 return {
                     STR_CODE: Codes.CODE_SUCCESS,
-                    STR_CONTENT: f"Ad blocking turned {state}",
+                    STR_CONTENT: f"{state}",
                     STR_OPERATION: Codes.CODE_AD_BLOCK
                 }
                 
@@ -50,7 +50,7 @@ class AdultContentBlockHandler(RequestHandler):
                 self.logger.info(f"Adult content blocking turned {state}")
                 return {
                     STR_CODE: Codes.CODE_SUCCESS,
-                    STR_CONTENT: f"Adult content blocking turned {state}",
+                    STR_CONTENT: f"{state}",
                     STR_OPERATION: Codes.CODE_ADULT_BLOCK
                 }
                 

@@ -34,151 +34,85 @@ static bool validate_message(const char *buffer) {
 }
 
 static bool handle_ad_block_settings(const char *buffer) {
-    if (!strstr(buffer, "\"" STR_OPERATION "\":\"" CODE_AD_BLOCK "\""))
-        return false;
+    const char *value_start;
+    size_t value_len;
+    int ret = get_json_value(buffer, STR_CONTENT, &value_start, &value_len);
     
-    const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
-    if (content) {
-        bool enabled = strstr(content, "on") != NULL;
-        update_settings(enabled, __settings.adult_content_enabled);
-        printk(KERN_INFO MODULE_NAME ": Ad blocking %s\n", 
-               enabled ? "enabled" : "disabled");
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to get content: %d\n", ret);
+        return false;
     }
+
+    update_ad_block_setting(strstr(value_start, "on") != NULL);
     return true;
 }
 
 static bool handle_adult_content_settings(const char *buffer) {
-    const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
-    if (content) {
-        bool enabled = strstr(content, "on") != NULL;
-        update_settings(__settings.ad_block_enabled, enabled);
-        printk(KERN_INFO MODULE_NAME ": Adult content blocking %s\n", 
-               enabled ? "enabled" : "disabled");
-    }
-    return true;
-}
-
-static bool extract_domain(const char *content, char *domain, size_t max_len) {
-    if (!content) return false;
+    const char *value_start;
+    size_t value_len;
+    int ret = get_json_value(buffer, STR_CONTENT, &value_start, &value_len);
     
-    content += strlen("\"" STR_CONTENT "\":\"");
-    const char *end = strchr(content, '"');
-    if (!end || (end - content) >= max_len) return false;
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to get content: %d\n", ret);
+        return false;
+    }
 
-    strncpy(domain, content, end - content);
-    domain[end - content] = '\0';
+    update_adult_block_setting(strstr(value_start, "on") != NULL);
     return true;
 }
 
 static bool handle_domain_operation(const char *buffer, bool is_add) {
-    char domain[MAX_DOMAIN_LENGTH];
-    const char *content = strstr(buffer, "\"" STR_CONTENT "\":\"");
+    const char *value_start;
+    size_t value_len;
+    int ret = get_json_value(buffer, STR_CONTENT, &value_start, &value_len);
     
-    if (extract_domain(content, domain, MAX_DOMAIN_LENGTH)) {
-        if (is_add) 
-            add_domain_to_cache(domain);
-        else 
-            remove_domain_from_cache(domain);
-        
-        return true;
-    }
-    return false;
-}
-
-static bool parse_settings(const char *buffer) {
-    const char *settings = strstr(buffer, "\"" STR_SETTINGS "\":");
-    if (!settings) {
-        printk(KERN_WARNING MODULE_NAME ": Settings object not found\n");
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to get domain content: %d\n", ret);
         return false;
     }
-
-    bool ad_block = strstr(settings, "\"" STR_AD_BLOCK "\":\"on\"") != NULL;
-    bool adult_block = strstr(settings, "\"" STR_ADULT_BLOCK "\":\"on\"") != NULL;
-    update_settings(ad_block, adult_block);
     
-    return true;
-}
-
-static bool parse_domains(const char *buffer) {
-    const char *domains = strstr(buffer, "\"" STR_DOMAINS "\":[");
-    if (!domains) {
-        printk(KERN_WARNING MODULE_NAME ": Domains array not found\n");
+    if (value_len >= MAX_DOMAIN_LENGTH) {
+        printk(KERN_WARNING MODULE_NAME ": Domain too long\n");
         return false;
     }
-
-    domains += strlen("\"" STR_DOMAINS "\":[");
-
+    
     char domain[MAX_DOMAIN_LENGTH];
-    const char *start = domains;
-    const char *end;
-    int count_domains = 0;
-
-    while ((start = strchr(start, '"')) != NULL) {
-        start++; // Skip opening quote
-        end = strchr(start, '"');
-        if (!end) break;
-
-        size_t len = end - start;
-        if (len >= MAX_DOMAIN_LENGTH) {
-            printk(KERN_WARNING MODULE_NAME ": Domain too long, skipping\n");
-            start = end + 1;
-            continue;
-        }
-
-        memcpy(domain, start, len);
-        domain[len] = '\0';
+    memcpy(domain, value_start, value_len);
+    domain[value_len] = '\0';
+    
+    if (is_add)
         add_domain_to_cache(domain);
-        
-        start = end + 1;
-        count_domains++;
-    }
+     else 
+        remove_domain_from_cache(domain);
 
-    printk(KERN_INFO MODULE_NAME ": Initialized with %d domains\n", count_domains);
     return true;
 }
 
 static bool handle_initial_settings(const char *buffer) {
-    return parse_settings(buffer) && parse_domains(buffer);
-}
+    const char *settings_start;
+    size_t settings_len;
+    
+    int ret = get_json_value(buffer, STR_SETTINGS, &settings_start, &settings_len);
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to get settings object: %d\n", ret);
+        return false;
+    }
 
-static int get_operation_code(const char *buffer) {
-    printk(KERN_DEBUG MODULE_NAME ": Parsing operation from: %s\n", buffer);
-    
-    const char *op_str = strstr(buffer, "\"" STR_OPERATION "\":");
-    if (!op_str) {
-        printk(KERN_DEBUG MODULE_NAME ": Operation field not found\n");
-        return -1;
+    // Parse the settings values (ad_block and adult_block)
+    ret = parse_settings_values(settings_start, settings_len);
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to parse settings values: %d\n", ret);
+        return false;
     }
-    
-    // Skip to the value
-    op_str = strchr(op_str, ':');
-    if (!op_str) {
-        printk(KERN_DEBUG MODULE_NAME ": Malformed operation field\n");
-        return -1;
+
+    ret = parse_domains(buffer);
+    if (ret < 0) {
+        printk(KERN_WARNING MODULE_NAME ": Failed to parse domains: %d\n", ret);
+        return false;
     }
-    
-    // Skip whitespace and first quote
-    while (*op_str && (*op_str == ':' || *op_str == ' ' || *op_str == '"'))
-        op_str++;
-    
-    // Now we should be at the number
-    char num_str[8] = {0};  // Buffer for the number
-    int i = 0;
-    
-    // Copy until we hit a quote or other non-digit
-    while (i < 7 && op_str[i] >= '0' && op_str[i] <= '9') {
-        num_str[i] = op_str[i];
-        i++;
-    }
-    
-    int code;
-    if (kstrtoint(num_str, 10, &code) != 0) {
-        printk(KERN_DEBUG MODULE_NAME ": Failed to parse operation code from: %s\n", num_str);
-        return -1;
-    }
-    
-    printk(KERN_DEBUG MODULE_NAME ": Successfully parsed operation code: %d\n", code);
-    return code;
+
+    printk(KERN_INFO MODULE_NAME ": Successfully initialized settings and domains\n");
+    return true;
 }
 
 static int process_server_message(const char *buffer) {
