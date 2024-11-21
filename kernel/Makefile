@@ -1,49 +1,33 @@
-# Current directory
-PWD := $(shell pwd)
-
-debug:
-	echo $(PWD)
-
-# Module name extracted from utils.h
+# Extract module name from utils.h with simpler shell command
 MODULE_NAME := $(shell grep "define MODULE_NAME" $(PWD)/src/utils.h | cut -d'"' -f2)
 
-# Source and object files
-SRC_DIR := $(PWD)/src
-SRC_FILES := $(notdir $(wildcard $(SRC_DIR)/*.c))
-OBJ_FILES := $(SRC_FILES:.c=.o)
-
-# Module configuration
+# Source files
 obj-m := $(MODULE_NAME).o
-$(MODULE_NAME)-objs := $(OBJ_FILES)
+$(MODULE_NAME)-objs := src/main.o src/cache.o src/netfilter.o src/network.o src/json_parser.o
 
-# Kernel build directory
+# Kernel source directory
 KDIR := /lib/modules/$(shell uname -r)/build
 
-# Compiler flags
-ccflags-y := -I$(SRC_DIR)
+# Include directory
+ccflags-y := -I$(src)/src
 
 # Default target
 all:
-	$(MAKE) -C $(KDIR) M=$(PWD) src_dir=$(SRC_DIR) modules
+	$(MAKE) -C $(KDIR) M=$(PWD) modules
 
-# Clean build artifacts
 clean:
 	$(MAKE) -C $(KDIR) M=$(PWD) clean
-	rm -f *.o *.ko *.mod* *.symvers *.order
-	rm -rf .tmp_versions
+	rm -f Module.symvers Module.markers modules.order
 
-# Fix permissions if needed
-permissions:
-	sudo chown -R $(USER):$(USER) $(PWD)
-
-# Module management
+# Install module
 install:
 	sudo insmod $(MODULE_NAME).ko
 
+# Remove module
 remove:
 	sudo rmmod $(MODULE_NAME)
 
 read:
 	sudo dmesg | grep $(MODULE_NAME)
 
-.PHONY: all clean permissions install remove read
+.PHONY: all clean install remove read
