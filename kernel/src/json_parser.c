@@ -19,7 +19,7 @@ int get_json_value(const char *buffer, const char *key,
     if (!start)
         return -ENOENT;
     
-    start += strlen(key_pattern) + 1;  // +1 for colon
+    start += strlen(key_pattern) + 2;  // +1 for colon
     
     switch (*start) {
     case '"':

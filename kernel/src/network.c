@@ -43,7 +43,9 @@ static bool handle_ad_block_settings(const char *buffer) {
         return false;
     }
 
-    update_ad_block_setting(strstr(value_start, "on") != NULL);
+    bool enabled = (value_len == 2); // "on" = 2 chars
+    update_ad_block_setting(enabled);
+    printk(KERN_INFO MODULE_NAME ": Ad blocking setting processed: %s\n", enabled ? "on" : "off");
     return true;
 }
 
@@ -57,7 +59,9 @@ static bool handle_adult_content_settings(const char *buffer) {
         return false;
     }
 
-    update_adult_block_setting(strstr(value_start, "on") != NULL);
+    bool enabled = (value_len == 2); // "on" = 2 chars
+    update_adult_block_setting(enabled);
+    printk(KERN_INFO MODULE_NAME ": Adult content setting processed: %s\n", enabled ? "on" : "off");
     return true;
 }
 

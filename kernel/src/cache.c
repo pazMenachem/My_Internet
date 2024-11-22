@@ -84,31 +84,33 @@ void remove_domain_from_cache(const char *domain) {
 }
 
 void update_settings(bool ad_block, bool adult_block) {
+    struct settings_cache new_settings;
+    
+    // Prepare new settings
+    new_settings.ad_block_enabled = ad_block;
+    new_settings.adult_content_enabled = adult_block;
+    
+    // Update settings atomically
     spin_lock(&__cache_lock);
-    __settings.ad_block_enabled = ad_block;
-    __settings.adult_content_enabled = adult_block;
+    __settings = new_settings;
     spin_unlock(&__cache_lock);
-
-    printk(KERN_INFO MODULE_NAME ": Settings updated - Ad block: %s, Adult block: %s\n",
-           ad_block ? "on" : "off", adult_block ? "on" : "off");
+    
+    printk(KERN_INFO MODULE_NAME ": Settings updated - ad_block: %d, adult_block: %d\n",
+           ad_block, adult_block);
 }
 
 void update_ad_block_setting(bool enabled) {
     spin_lock(&__cache_lock);
     __settings.ad_block_enabled = enabled;
     spin_unlock(&__cache_lock);
-
-    printk(KERN_INFO MODULE_NAME ": Ad blocking %s\n", 
-           enabled ? "enabled" : "disabled");
+    printk(KERN_INFO MODULE_NAME ": Ad blocking %s\n", enabled ? "enabled" : "disabled");
 }
 
 void update_adult_block_setting(bool enabled) {
     spin_lock(&__cache_lock);
     __settings.adult_content_enabled = enabled;
     spin_unlock(&__cache_lock);
-
-    printk(KERN_INFO MODULE_NAME ": Adult content blocking %s\n", 
-           enabled ? "enabled" : "disabled");
+    printk(KERN_INFO MODULE_NAME ": Adult content blocking %s\n", enabled ? "enabled" : "disabled");
 }
 
 int init_cache(void) {

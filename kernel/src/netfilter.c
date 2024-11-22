@@ -15,6 +15,9 @@ static int parse_dns_name(unsigned char *src, char *dst, int max_len)
         if (step >= max_len - len - 1)
             return -1;
             
+        if (step == 0 || (step & 0xC0) == 0xC0)
+            break;
+            
         if (len)
             dst[len++] = '.';
             
@@ -26,7 +29,15 @@ static int parse_dns_name(unsigned char *src, char *dst, int max_len)
     }
     
     dst[len] = '\0';
-    return len;
+    
+    char *suffix = strstr(dst, ".Home");
+    if (suffix)
+        *suffix = '\0';
+    suffix = strstr(dst, ".local");
+    if (suffix)
+        *suffix = '\0';
+        
+    return strlen(dst);
 }
 
 static bool is_dns_query(struct sk_buff *skb) {
@@ -65,16 +76,23 @@ static void block_dns_response(struct sk_buff *skb) {
     struct udphdr *udp;
     struct dns_header *dns;
 
-    udp = udp_hdr(skb);
-    if (!udp)
+    if (!(udp = udp_hdr(skb)) || !(dns = (struct dns_header *)(udp + 1)))
         return;
 
-    dns = (struct dns_header *)(udp + 1);
-    if (!dns)
-        return;
+    // Set response flags for NXDOMAIN
+    dns->flags |= htons(DNS_RESPONSE | DNS_NXDOMAIN);
+    dns->ans_count = 0;
+    dns->auth_count = 0;
+    dns->add_count = 0;
 
-    dns->flags |= htons(1 << 15);  // Set response bit
-    dns->flags |= htons(3);        // Set "Name Error" response code
+    // Recalculate UDP checksum
+    udp->check = 0;
+    skb->csum = csum_partial((unsigned char *)udp, ntohs(udp->len), 0);
+    udp->check = csum_tcpudp_magic(ip_hdr(skb)->saddr,
+                                  ip_hdr(skb)->daddr,
+                                  ntohs(udp->len),
+                                  IPPROTO_UDP,
+                                  skb->csum);
 }
 
 static unsigned int pre_routing_hook(void *priv,
@@ -83,20 +101,22 @@ static unsigned int pre_routing_hook(void *priv,
     struct iphdr *ip_header;
     char domain[MAX_DOMAIN_LENGTH];
     
-    if (!skb)
+    if (!skb || !(ip_header = ip_hdr(skb)))
         return NF_ACCEPT;
 
-    ip_header = ip_hdr(skb);
-    if (!ip_header)
+    // Only process UDP DNS packets
+    if (ip_header->protocol != IPPROTO_UDP || !is_dns_query(skb))
         return NF_ACCEPT;
 
-    if (ip_header->protocol == IPPROTO_UDP && is_dns_query(skb)) {
-        if (extract_dns_query(skb, domain, sizeof(domain)) > 0) {
-            if (is_domain_blocked(domain)) {
-                block_dns_response(skb);
-                return NF_DROP;
-            }
-        }
+    // Extract domain name from DNS query
+    if (extract_dns_query(skb, domain, sizeof(domain)) <= 0)
+        return NF_ACCEPT;
+
+    // Check if domain is blocked
+    if (is_domain_blocked(domain)) {
+        printk(KERN_INFO MODULE_NAME ": Blocking access to domain: %s\n", domain);
+        block_dns_response(skb);
+        return NF_DROP;
     }
 
     return NF_ACCEPT;
@@ -109,41 +129,38 @@ static unsigned int local_out_hook(void *priv,
     struct udphdr *udp;
     struct settings_cache current_settings;
     
-    if (!skb)
+    if (!skb || !(ip_header = ip_hdr(skb)))
         return NF_ACCEPT;
 
-    ip_header = ip_hdr(skb);
-    if (!ip_header)
+    // Only intercept UDP DNS queries (port 53)
+    if (ip_header->protocol != IPPROTO_UDP || 
+        !(udp = udp_hdr(skb)) || 
+        ntohs(udp->dest) != 53)
         return NF_ACCEPT;
 
-    if (ip_header->protocol == IPPROTO_UDP) {
-        udp = udp_hdr(skb);
-        if (!udp || ntohs(udp->dest) != 53)
-            return NF_ACCEPT;
+    spin_lock(&__cache_lock);
+    current_settings = __settings;
+    spin_unlock(&__cache_lock);
 
-        spin_lock(&__cache_lock);
-        current_settings = __settings;
-        spin_unlock(&__cache_lock);
-
-        // Get current DNS server based on settings
-        if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
-            printk(KERN_DEBUG MODULE_NAME ": Redirecting to ADGUARD_FAMILY_DNS\n");
-            ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);
-        } else if (current_settings.ad_block_enabled) {
-            printk(KERN_DEBUG MODULE_NAME ": Redirecting to ADGUARD_DNS\n");
-            ip_header->daddr = in_aton(ADGUARD_DNS);
-        } else if (current_settings.adult_content_enabled) {
-            printk(KERN_DEBUG MODULE_NAME ": Redirecting to CLOUDFLARE_DNS\n");
-            ip_header->daddr = in_aton(CLOUDFLARE_DNS);
-        } else {
-            return NF_ACCEPT; // No filtering, use system DNS
-        }
-
-        ip_header->check = 0;
-        ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
-
+    // Only redirect if filtering is enabled
+    if (!current_settings.ad_block_enabled && !current_settings.adult_content_enabled)
         return NF_ACCEPT;
+
+    // Select appropriate DNS server
+    if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
+        ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);
+        printk(KERN_DEBUG MODULE_NAME ": Using ADGUARD_FAMILY_DNS for both filters\n");
+    } else if (current_settings.ad_block_enabled) {
+        ip_header->daddr = in_aton(ADGUARD_DNS);
+        printk(KERN_DEBUG MODULE_NAME ": Using ADGUARD_DNS for ad blocking\n");
+    } else if (current_settings.adult_content_enabled) {
+        ip_header->daddr = in_aton(CLOUDFLARE_DNS);
+        printk(KERN_DEBUG MODULE_NAME ": Using CLOUDFLARE_DNS for adult content\n");
     }
+
+    // Recalculate checksum
+    ip_header->check = 0;
+    ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
 
     return NF_ACCEPT;
 }

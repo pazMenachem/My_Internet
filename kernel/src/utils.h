@@ -42,6 +42,10 @@
 #define CLOUDFLARE_DNS          "1.1.1.3"
 #define ADGUARD_FAMILY_DNS      "94.140.14.15"
 
+// DNS response flags
+#define DNS_RESPONSE     0x8000
+#define DNS_NXDOMAIN    0x0003
+
 /* Common structures used across modules */
 struct dns_header {
     __u16 id;
