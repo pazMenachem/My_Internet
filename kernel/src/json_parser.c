@@ -30,10 +30,6 @@ int get_json_value(const char *buffer, const char *key,
         end = strchr(start + 1, ']');
         end++;
         break;
-    case '{':
-        end = strchr(start + 1, '}');
-        end++;
-        break;
     default:
         return -EINVAL;
     }
