@@ -9,12 +9,14 @@ from .utils import (
     STR_SETTINGS,invalid_json_response
 )
 from .logger import setup_logger
+from .dns_manager import DNSManager
 
 class RequestHandler:
     """Base class for request handlers."""
     def __init__(self, db_manager: DatabaseManager):
         self.db_manager = db_manager
-        self.logger = setup_logger(__name__)
+        self.dns_manager = DNSManager()
+        self.logger = setup_logger(self.__class__.__name__)
 
 class AdBlockHandler(RequestHandler):
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -23,6 +25,11 @@ class AdBlockHandler(RequestHandler):
             if STR_CONTENT in request_data:
                 state = request_data[STR_CONTENT]
                 self.db_manager.update_setting(STR_AD_BLOCK, state)
+                
+                # Update DNS settings based on current state
+                adult_state = self.db_manager.get_setting(STR_ADULT_BLOCK)
+                self.dns_manager.update_dns_settings(state, adult_state)
+                
                 self.logger.info(f"Ad blocking turned {state}")
                 return {
                     STR_CODE: Codes.CODE_SUCCESS,
@@ -47,6 +54,11 @@ class AdultContentBlockHandler(RequestHandler):
             if STR_CONTENT in request_data:
                 state = request_data[STR_CONTENT]
                 self.db_manager.update_setting(STR_ADULT_BLOCK, state)
+                
+                # Update DNS settings based on current state
+                ad_state = self.db_manager.get_setting(STR_AD_BLOCK)
+                self.dns_manager.update_dns_settings(ad_state, state)
+                
                 self.logger.info(f"Adult content blocking turned {state}")
                 return {
                     STR_CODE: Codes.CODE_SUCCESS,
