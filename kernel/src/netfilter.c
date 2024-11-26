@@ -76,33 +76,28 @@ static bool is_dns_query(struct sk_buff *skb) {
 }
 
 /**
- * extract_dns_query - Extract queried domain from DNS packet
- * @skb: Socket buffer containing the DNS packet
+ * extract_domain_from_response - Extract queried domain from DNS response
+ * @udp: UDP header of the packet
+ * @skb: Socket buffer containing the DNS response
  * @domain: Buffer to store the extracted domain name
  * @maxlen: Maximum length of domain buffer
  *
- * Extracts and parses the queried domain name from a DNS packet.
- * Validates UDP and DNS headers before attempting extraction.
+ * Extracts and parses the queried domain name from a DNS response packet.
+ * Validates DNS header before attempting extraction.
  *
  * Return: Length of extracted domain name on success, -1 on failure
  */
-static int extract_dns_query(struct sk_buff *skb, char *domain, int maxlen) {
-    struct udphdr *udp;
+static int extract_domain_from_response(const struct udphdr *udp, struct sk_buff *skb, 
+                                      char *domain, int maxlen) {
     struct dns_header *dns;
     unsigned char *data;
-
-    udp = udp_hdr(skb);
-    if (!udp)
-        return -1;
 
     dns = (struct dns_header *)(udp + 1);
     if (!dns)
         return -1;
 
     data = (unsigned char *)(dns + 1);
-    int ret = parse_domain_name(data, domain, maxlen);
-
-    return ret;
+    return parse_domain_name(data, domain, maxlen);
 }
 
 /**
@@ -140,39 +135,108 @@ static void block_dns_response(struct sk_buff *skb) {
 }
 
 /**
- * pre_routing_hook - Netfilter hook for DNS request filtering
+ * check_dns_nxdomain - Check if DNS response is NXDOMAIN
+ * @udp: UDP header of the packet
+ * @skb: Socket buffer containing the DNS response
+ *
+ * Return: true if packet is NXDOMAIN response, false otherwise
+ */
+static bool check_dns_nxdomain(const struct udphdr *udp, struct sk_buff *skb) {
+    struct dns_header *dns;
+    uint16_t flags;
+
+    dns = (struct dns_header *)(udp + 1);
+    if (unlikely(!dns))
+        return false;
+
+    flags = ntohs(dns->flags);
+    // check both response bit and NXDOMAIN in one comparison
+    if ((flags & (DNS_RESPONSE | DNS_RCODE_MASK)) == (DNS_RESPONSE | DNS_NXDOMAIN)) {
+        char domain[MAX_DOMAIN_LENGTH];
+
+        if (extract_domain_from_response(udp, skb, domain, sizeof(domain)) > 0) {
+            printk(KERN_INFO MODULE_NAME ": NXDOMAIN response for domain: %s\n", domain);
+            return true;
+        }
+    }
+
+    return false;
+}
+
+/**
+ * handle_dns_response - Process DNS response for domain blocking
+ * @skb: Socket buffer containing the packet
+ * @udp: UDP header
+ * @dns: DNS header
+ * @domain: Extracted domain name
+ *
+ * Checks if domain is blocked and modifies response if needed.
+ * Logs NXDOMAIN responses for monitoring.
+ */
+static void handle_dns_response(struct sk_buff *skb, 
+                              const struct udphdr *udp,
+                              const struct dns_header *dns,
+                              const char *domain) {
+    uint16_t flags = ntohs(dns->flags);
+    bool is_blocked = is_domain_blocked(domain);
+
+    if (is_blocked) 
+        block_dns_response(skb);
+
+    if (is_blocked || ((flags & (DNS_RESPONSE | DNS_RCODE_MASK)) == (DNS_RESPONSE | DNS_NXDOMAIN)))
+        printk(KERN_INFO MODULE_NAME ": NXDOMAIN response for domain: %s%s\n",
+               domain, is_blocked ? " (blocked)" : "");
+}
+
+/**
+ * is_dns_response - Check if packet is a valid DNS response
+ * @skb: Socket buffer containing the packet
+ * @udp: Pointer to store UDP header
+ * @dns: Pointer to store DNS header
+ *
+ * Validates packet headers and checks if it's a DNS response (port 53)
+ *
+ * Return: true if valid DNS response, false otherwise
+ */
+static bool is_dns_response(struct sk_buff *skb, struct udphdr **udp, struct dns_header **dns) {
+    struct iphdr *ip_header;
+    
+    if (unlikely(!skb                               ||
+                 !(ip_header = ip_hdr(skb))         || 
+                 ip_header->protocol != IPPROTO_UDP ||
+                 !(*udp = udp_hdr(skb))             ||
+                 ntohs((*udp)->source) != 53        ||
+                 !(*dns = (struct dns_header *)(*udp + 1))))
+        return false;
+
+    return true;
+}
+
+/**
+ * pre_routing_hook - Netfilter hook for DNS response filtering
  * @priv: Private data (unused)
  * @skb: Socket buffer containing the packet
  * @state: Netfilter hook state
  *
- * Main packet filtering function that:
- * 1. Identifies DNS queries
- * 2. Extracts queried domain name
- * 3. Checks domain against blocklist
- * 4. Returns NXDOMAIN for blocked domains
+ * Processes incoming DNS responses in pre-routing chain.
+ * Modifies responses for blocked domains to return NXDOMAIN.
  *
- * Return: NF_ACCEPT to allow packet, NF_DROP for blocked domains
+ * Return: NF_ACCEPT always (modified or unmodified packet)
  */
 static unsigned int pre_routing_hook(void *priv,
                                    struct sk_buff *skb,
                                    const struct nf_hook_state *state) {
-    struct iphdr *ip_header;
+    struct udphdr *udp;
+    struct dns_header *dns;
     char domain[MAX_DOMAIN_LENGTH];
     
-    if (!skb || !(ip_header = ip_hdr(skb)))
+    if (!is_dns_response(skb, &udp, &dns))
         return NF_ACCEPT;
 
-    if (ip_header->protocol != IPPROTO_UDP || !is_dns_query(skb))
+    if (extract_domain_from_response(udp, skb, domain, MAX_DOMAIN_LENGTH) <= 0)
         return NF_ACCEPT;
 
-    if (extract_dns_query(skb, domain, sizeof(domain)) <= 0)
-        return NF_ACCEPT;
-
-    if (is_domain_blocked(domain)) {
-        printk(KERN_INFO MODULE_NAME ": Blocking access to domain: %s\n", domain);
-        block_dns_response(skb);
-        return NF_DROP;
-    }
+    handle_dns_response(skb, udp, dns, domain);
 
     return NF_ACCEPT;
 }

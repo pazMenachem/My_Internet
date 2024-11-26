@@ -18,6 +18,11 @@ struct dns_packet {
     unsigned char *data;
 };
 
+/* DNS header flags */
+#define DNS_RESPONSE     0x8000  /* Response bit (1=response, 0=query) */
+#define DNS_RCODE_MASK   0x000F  /* Response code mask (last 4 bits) */
+#define DNS_NXDOMAIN     0x0003  /* NXDOMAIN response code */
+
 /**
  * init_netfilter - Initialize the netfilter hooks
  *
