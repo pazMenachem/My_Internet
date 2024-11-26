@@ -28,20 +28,3 @@ int get_json_value(const char *buffer, const char *key, const char **value_start
  *         -ENOENT: Operation code not found
  */
 int get_operation_code(const char *buffer);
-
-/**
- * parse_settings - Parse settings from JSON string
- * @buffer: Input JSON string
- * @value_start: Pointer to store the start position of the value
- * @value_len: Pointer to store the length of the value
- * @example: 
- * {
- *     "settings": {
- *         "key1": "value1",
- *         "key2": "value2"
- *     }w
- * }
- *
- * Return: 0 on success, negative on failure
- */
-int parse_settings(const char *buffer, const char **value_start, size_t *value_len);

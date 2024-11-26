@@ -9,7 +9,6 @@
 #include "utils.h"
 #include "json_parser.h"
 
-extern struct settings_cache __settings;
 extern spinlock_t __cache_lock;
 
 /* Cache structures */
@@ -17,11 +16,6 @@ struct domain_entry {
     struct hlist_node node;
     char *domain;
     struct rcu_head rcu;
-};
-
-struct settings_cache {
-    bool ad_block_enabled;
-    bool adult_content_enabled;
 };
 
 /**
@@ -60,17 +54,6 @@ void add_domain_to_cache(const char *domain);
 void remove_domain_from_cache(const char *domain);
 
 /**
- * update_settings - Update the filtering settings
- * @ad_block: Enable/disable ad blocking
- * @adult_block: Enable/disable adult content blocking
- *
- * Updates the global filtering settings under spinlock protection.
- *
- * Context: Any context (uses spinlock)
- */
-void update_settings(bool ad_block, bool adult_block);
-
-/**
  * init_cache - Initialize the domain cache and settings
  *
  * Initializes the hash table for domain cache and default settings.
@@ -92,18 +75,6 @@ int init_cache(void);
 void cleanup_cache(void);
 
 /**
- * update_ad_block_setting - Update ad blocking setting
- * @enabled: true to enable, false to disable
- */
-void update_ad_block_setting(bool enabled);
-
-/**
- * update_adult_block_setting - Update adult content blocking setting
- * @enabled: true to enable, false to disable
- */
-void update_adult_block_setting(bool enabled);
-
-/**
  * parse_domains - Parse domains from JSON string
  * @buffer: JSON string containing domains
  * @example: "["example.com", "example.org"]"
@@ -111,15 +82,5 @@ void update_adult_block_setting(bool enabled);
  * Return: 0 on success, negative error code on failure
  */
 int parse_domains(const char *buffer);
-
-/**
- * parse_settings_values - Parse settings values from JSON string
- * @settings: JSON string containing settings
- * @settings_len: Length of the JSON string
- * @example: "{"ad_block":"on","adult_block":"off"}"
- *
- * Return: 0 on success, negative error code on failure
- */
-int parse_settings_values(const char *settings, size_t settings_len);
 
 #endif /* CACHE_H */ 
