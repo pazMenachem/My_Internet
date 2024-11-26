@@ -6,21 +6,12 @@ static struct task_struct *connection_thread = NULL;
 static bool module_running = true;
 
 /**
- * process_server_message - Process incoming JSON messages from server
+ * validate_message - Validates server response contains success code
  * @buffer: Null-terminated string containing JSON message
  *
- * Parses JSON messages and executes corresponding actions:
- * - Update ad blocking settings
- * - Update adult content settings
- * - Add/remove domains from cache
- * - Update initial settings
- *
- * Return: 0 on success, negative on error
+ * Return: true if message contains success code, false otherwise
  */
-static bool validate_message(const char *buffer) {
-    printk(KERN_DEBUG MODULE_NAME ": Validating message: %s\n", buffer);
-    
-    // More flexible validation that ignores whitespace
+static bool validate_message(const char *buffer) {    
     char code_pattern[32];
     snprintf(code_pattern, sizeof(code_pattern), "\"%s\"", CODE_SUCCESS);
     
@@ -33,6 +24,15 @@ static bool validate_message(const char *buffer) {
     return valid;
 }
 
+/**
+ * handle_domain_operation - Process domain addition/removal requests
+ * @buffer: Null-terminated string containing JSON message
+ * @is_add: true for domain addition, false for removal
+ *
+ * Extracts domain from JSON message and performs requested cache operation
+ *
+ * Return: true on success, false on failure
+ */
 static bool handle_domain_operation(const char *buffer, bool is_add) {
     const char *value_start;
     size_t value_len;
@@ -60,6 +60,14 @@ static bool handle_domain_operation(const char *buffer, bool is_add) {
     return true;
 }
 
+/**
+ * handle_initial_settings - Process initial settings message
+ * @buffer: Null-terminated string containing JSON message
+ *
+ * Parses initial domain list and settings from server
+ *
+ * Return: true on success, false on failure
+ */
 static bool handle_initial_settings(const char *buffer) {
     int ret = 0;
     ret = parse_domains(buffer);
@@ -72,18 +80,25 @@ static bool handle_initial_settings(const char *buffer) {
     return true;
 }
 
+/**
+ * process_server_message - Process incoming JSON messages from server
+ * @buffer: Null-terminated string containing JSON message
+ *
+ * Validates message and routes to appropriate handler based on operation code:
+ * - CODE_ADD_DOMAIN_INT: Add domain to cache
+ * - CODE_REMOVE_DOMAIN_INT: Remove domain from cache
+ * - CODE_INIT_SETTINGS_INT: Initialize domain list
+ *
+ * Return: 0 on success, -EINVAL on validation or processing failure
+ */
 static int process_server_message(const char *buffer) {
-    printk(KERN_DEBUG MODULE_NAME ": Processing message: %s\n", buffer);
     
     if (!validate_message(buffer)) {
         printk(KERN_WARNING MODULE_NAME ": Message validation failed\n");
         return 0;
     }
     
-    int op = get_operation_code(buffer);
-    printk(KERN_DEBUG MODULE_NAME ": Operation code: %d\n", op);
-    
-    switch (op) {
+    switch (get_operation_code(buffer)) {
         case CODE_ADD_DOMAIN_INT:
             printk(KERN_DEBUG MODULE_NAME ": Handling add domain\n");
             return handle_domain_operation(buffer, true) ? 0 : -EINVAL;
@@ -97,11 +112,20 @@ static int process_server_message(const char *buffer) {
             return handle_initial_settings(buffer) ? 0 : -EINVAL;
 
         default:
-            printk(KERN_WARNING MODULE_NAME ": Invalid or unhandled operation code: %d\n", op);
+            printk(KERN_WARNING MODULE_NAME ": Invalid or unhandled operation code\n");
             return -EINVAL;
     }
 }
 
+/**
+ * connection_handler - Kernel thread for handling server communication
+ * @data: Thread data (unused)
+ *
+ * Continuously listens for messages from server and processes them
+ * until module_running is set to false
+ *
+ * Return: 0 on normal exit, -ENOMEM on memory allocation failure
+ */
 static int connection_handler(void *data) {
     struct socket *sock = server_socket;
     char *buffer;
@@ -119,7 +143,7 @@ static int connection_handler(void *data) {
         iov.iov_len = MAX_PAYLOAD - 1;
 
         if (server_socket)
-            printk(KERN_DEBUG MODULE_NAME ": listening...\n");
+            printk(KERN_DEBUG MODULE_NAME ": Listening...\n");
         ret = kernel_recvmsg(sock, &msg, &iov, 1, MAX_PAYLOAD - 1, 0);
         if (ret > 0) {
             buffer[ret] = '\0';

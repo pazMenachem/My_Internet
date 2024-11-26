@@ -19,13 +19,10 @@ struct dns_packet {
 };
 
 /**
- * init_netfilter - Initialize the netfilter hooks for DNS filtering
+ * init_netfilter - Initialize the netfilter hooks
  *
- * This function sets up and registers two netfilter hooks:
- * 1. Pre-routing hook for intercepting incoming DNS queries
- * 2. Local-out hook for redirecting DNS queries to appropriate servers
- *
- * Context: Process context only (may sleep)
+ * This function sets up and registers netfilter hooks:
+ *  Pre-routing hook for intercepting incoming DNS queries
  *
  * Return: 0 on success, negative error code on failure
  */
@@ -33,11 +30,6 @@ int init_netfilter(void);
 
 /**
  * cleanup_netfilter - Clean up and unregister netfilter hooks
- *
- * This function unregisters both the pre-routing and local-out hooks
- * and performs necessary cleanup of netfilter resources.
- *
- * Context: Process context only (may sleep)
  */
 void cleanup_netfilter(void);
 

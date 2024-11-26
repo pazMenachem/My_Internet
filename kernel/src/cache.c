@@ -29,8 +29,6 @@ bool is_domain_blocked(const char *domain) {
     }
     rcu_read_unlock();
 
-    printk(KERN_DEBUG MODULE_NAME ": Domain %s is %s\n", 
-           domain, found ? "blocked" : "not blocked");
     return found;
 }
 
@@ -116,12 +114,21 @@ int parse_domains(const char *buffer) {
     }
 
     char domain[MAX_DOMAIN_LENGTH];
-    value_start++;
+    value_start++; // Skip the opening bracket '['
     const char *end;
     int count_domains = 0;
 
-    while (*value_start != ']') {
-        value_start++; // Skip opening quote
+    while (*value_start && *value_start != ']') {
+        // Skip whitespace and commas
+        while (*value_start && (*value_start == ' ' || *value_start == ',' || *value_start == '"')) {
+            value_start++;
+        }
+        
+        // Check if we've reached the end of the array
+        if (*value_start == ']' || *value_start == '\0') {
+            break;
+        }
+
         end = strchr(value_start, '"');
         if (!end) break;
 

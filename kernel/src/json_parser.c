@@ -5,7 +5,6 @@ int get_json_value(const char *buffer, const char *key,
 {
     if (!buffer || !key)
         return -EINVAL;
-    printk(KERN_INFO MODULE_NAME ": Parsing key: %s\n", key);
 
     if (strlen(key) > 124)  // 128 - 3 (quotes + null) - 1 (safety)
         return -EOVERFLOW;
@@ -66,7 +65,5 @@ int get_operation_code(const char *buffer) {
         printk(KERN_WARNING MODULE_NAME ": Failed to parse operation code from: %s\n", num_str);
         return EINVAL;
     }
-    
-    printk(KERN_INFO MODULE_NAME ": Successfully parsed operation code: %d\n", code);
     return code;
 }

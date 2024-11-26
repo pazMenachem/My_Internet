@@ -54,9 +54,9 @@ void add_domain_to_cache(const char *domain);
 void remove_domain_from_cache(const char *domain);
 
 /**
- * init_cache - Initialize the domain cache and settings
+ * init_cache - Initialize the domain cache
  *
- * Initializes the hash table for domain cache and default settings.
+ * Initializes the hash table for domain cache
  *
  * Context: Process context only
  *
@@ -69,15 +69,13 @@ int init_cache(void);
  *
  * Frees all memory associated with cached domains and
  * cleans up the hash table.
- *
- * Context: Process context only
  */
 void cleanup_cache(void);
 
 /**
  * parse_domains - Parse domains from JSON string
  * @buffer: JSON string containing domains
- * @example: "["example.com", "example.org"]"
+ * @example: "[ \"example.com\", \"example.org\" ]"
  *
  * Return: 0 on success, negative error code on failure
  */
