@@ -2,7 +2,6 @@
 
 /* Netfilter hook operations */
 static struct nf_hook_ops nfho_pre_routing;
-static struct nf_hook_ops nfho_local_out;
 
 /* DNS packet handling functions */
 static int parse_dns_name(unsigned char *src, char *dst, int max_len)
@@ -122,49 +121,6 @@ static unsigned int pre_routing_hook(void *priv,
     return NF_ACCEPT;
 }
 
-static unsigned int local_out_hook(void *priv,
-                                 struct sk_buff *skb,
-                                 const struct nf_hook_state *state) {
-    struct iphdr *ip_header;
-    struct udphdr *udp;
-    struct settings_cache current_settings;
-    
-    if (!skb || !(ip_header = ip_hdr(skb)))
-        return NF_ACCEPT;
-
-    // Only intercept UDP DNS queries (port 53)
-    if (ip_header->protocol != IPPROTO_UDP || 
-        !(udp = udp_hdr(skb)) || 
-        ntohs(udp->dest) != 53)
-        return NF_ACCEPT;
-
-    spin_lock(&__cache_lock);
-    current_settings = __settings;
-    spin_unlock(&__cache_lock);
-
-    // Only redirect if filtering is enabled
-    if (!current_settings.ad_block_enabled && !current_settings.adult_content_enabled)
-        return NF_ACCEPT;
-
-    // Select appropriate DNS server
-    if (current_settings.ad_block_enabled && current_settings.adult_content_enabled) {
-        ip_header->daddr = in_aton(ADGUARD_FAMILY_DNS);
-        printk(KERN_DEBUG MODULE_NAME ": Using ADGUARD_FAMILY_DNS for both filters\n");
-    } else if (current_settings.ad_block_enabled) {
-        ip_header->daddr = in_aton(ADGUARD_DNS);
-        printk(KERN_DEBUG MODULE_NAME ": Using ADGUARD_DNS for ad blocking\n");
-    } else if (current_settings.adult_content_enabled) {
-        ip_header->daddr = in_aton(CLOUDFLARE_DNS);
-        printk(KERN_DEBUG MODULE_NAME ": Using CLOUDFLARE_DNS for adult content\n");
-    }
-
-    // Recalculate checksum
-    ip_header->check = 0;
-    ip_header->check = ip_fast_csum((unsigned char *)ip_header, ip_header->ihl);
-
-    return NF_ACCEPT;
-}
-
 int init_netfilter(void) {
     int ret = 0;
 
@@ -179,17 +135,6 @@ int init_netfilter(void) {
         return ret;
     }
 
-    nfho_local_out.hook = local_out_hook;
-    nfho_local_out.hooknum = NF_INET_LOCAL_OUT;
-    nfho_local_out.pf = PF_INET;
-    nfho_local_out.priority = NF_IP_PRI_FIRST;
-
-    ret = nf_register_net_hook(&init_net, &nfho_local_out);
-    if (ret < 0) {
-        nf_unregister_net_hook(&init_net, &nfho_pre_routing);
-        printk(KERN_ERR MODULE_NAME ": Failed to register local out hook\n");
-        return ret;
-    }
     printk(KERN_INFO MODULE_NAME ": Netfilter hooks registered\n");
 
     return 0;
@@ -197,6 +142,5 @@ int init_netfilter(void) {
 
 void cleanup_netfilter(void) {
     nf_unregister_net_hook(&init_net, &nfho_pre_routing);
-    nf_unregister_net_hook(&init_net, &nfho_local_out);
     printk(KERN_INFO MODULE_NAME ": Netfilter hooks cleaned up\n");
 }

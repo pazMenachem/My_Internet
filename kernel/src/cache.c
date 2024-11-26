@@ -3,7 +3,6 @@
 /* Global variables */
 DEFINE_HASHTABLE(domain_cache, __HASH_SIZE);
 DEFINE_SPINLOCK(__cache_lock);
-struct settings_cache __settings;
 
 /* Simple but effective domain hash function */
 static unsigned int hash_domain(const char *domain)
@@ -83,40 +82,8 @@ void remove_domain_from_cache(const char *domain) {
     printk(KERN_INFO MODULE_NAME ": Removed domain %s from cache\n", domain);
 }
 
-void update_settings(bool ad_block, bool adult_block) {
-    struct settings_cache new_settings;
-    
-    // Prepare new settings
-    new_settings.ad_block_enabled = ad_block;
-    new_settings.adult_content_enabled = adult_block;
-    
-    // Update settings atomically
-    spin_lock(&__cache_lock);
-    __settings = new_settings;
-    spin_unlock(&__cache_lock);
-    
-    printk(KERN_INFO MODULE_NAME ": Settings updated - ad_block: %d, adult_block: %d\n",
-           ad_block, adult_block);
-}
-
-void update_ad_block_setting(bool enabled) {
-    spin_lock(&__cache_lock);
-    __settings.ad_block_enabled = enabled;
-    spin_unlock(&__cache_lock);
-    printk(KERN_INFO MODULE_NAME ": Ad blocking %s\n", enabled ? "enabled" : "disabled");
-}
-
-void update_adult_block_setting(bool enabled) {
-    spin_lock(&__cache_lock);
-    __settings.adult_content_enabled = enabled;
-    spin_unlock(&__cache_lock);
-    printk(KERN_INFO MODULE_NAME ": Adult content blocking %s\n", enabled ? "enabled" : "disabled");
-}
-
 int init_cache(void) {
     hash_init(domain_cache);
-    __settings.ad_block_enabled = false;
-    __settings.adult_content_enabled = false;
     printk(KERN_INFO MODULE_NAME ": Cache initialized\n");
     return 0;
 }
@@ -175,30 +142,4 @@ int parse_domains(const char *buffer) {
 
     printk(KERN_INFO MODULE_NAME ": Initialized with %d domains\n", count_domains);
     return count_domains;
-}
-
-int parse_settings_values(const char *settings, size_t settings_len) {
-    const char *value_start;
-    size_t value_len;
-    bool ad_block = false;
-    bool adult_block = false;
-
-    int ret_ad_block = get_json_value(settings, STR_AD_BLOCK, &value_start, &value_len);
-    if (ret_ad_block < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Failed to parse %s: %d\n", STR_AD_BLOCK, ret_ad_block);
-        return ret_ad_block;
-    }
-
-    ad_block = value_len == 2; // "on" | "off"
-
-    int ret_adult_block = get_json_value(settings, STR_ADULT_BLOCK, &value_start, &value_len);
-    if (ret_adult_block < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Failed to parse %s: %d\n", STR_ADULT_BLOCK, ret_adult_block);
-        return ret_adult_block;
-    }
-
-    adult_block = value_len == 2; // "on" | "off"
-
-    update_settings(ad_block, adult_block);
-    return 0;
 }

@@ -30,10 +30,6 @@ int get_json_value(const char *buffer, const char *key,
         end = strchr(start + 1, ']');
         end++;
         break;
-    case '{':
-        end = strchr(start + 1, '}');
-        end++;
-        break;
     default:
         return -EINVAL;
     }
@@ -73,17 +69,4 @@ int get_operation_code(const char *buffer) {
     
     printk(KERN_INFO MODULE_NAME ": Successfully parsed operation code: %d\n", code);
     return code;
-}
-
-int parse_settings(const char *buffer, const char **value_start, size_t *value_len) {
-    int ret = get_json_value(buffer, STR_SETTINGS, value_start, value_len);
-    
-    if (ret < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Settings object not found: %d\n", ret);
-        return ret;
-    }
-
-    printk(KERN_INFO MODULE_NAME ": Successfully parsed settings: %.*s\n", 
-           (int)*value_len, *value_start);
-    return 0;
 }

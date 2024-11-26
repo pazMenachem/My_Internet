@@ -27,42 +27,10 @@ static bool validate_message(const char *buffer) {
     const char *code_pos = strstr(buffer, code_pattern);
     bool valid = (code_pos != NULL);
     
-    printk(KERN_DEBUG MODULE_NAME ": Looking for code pattern: %s\n", code_pattern);
-    printk(KERN_DEBUG MODULE_NAME ": Message validation result: %s\n", valid ? "valid" : "invalid");
+    if (!valid)
+        printk(KERN_DEBUG MODULE_NAME ": Message validation result: Message is invalid\n");
     
     return valid;
-}
-
-static bool handle_ad_block_settings(const char *buffer) {
-    const char *value_start;
-    size_t value_len;
-    int ret = get_json_value(buffer, STR_CONTENT, &value_start, &value_len);
-    
-    if (ret < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Failed to get content: %d\n", ret);
-        return false;
-    }
-
-    bool enabled = (value_len == 2); // "on" = 2 chars
-    update_ad_block_setting(enabled);
-    printk(KERN_INFO MODULE_NAME ": Ad blocking setting processed: %s\n", enabled ? "on" : "off");
-    return true;
-}
-
-static bool handle_adult_content_settings(const char *buffer) {
-    const char *value_start;
-    size_t value_len;
-    int ret = get_json_value(buffer, STR_CONTENT, &value_start, &value_len);
-    
-    if (ret < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Failed to get content: %d\n", ret);
-        return false;
-    }
-
-    bool enabled = (value_len == 2); // "on" = 2 chars
-    update_adult_block_setting(enabled);
-    printk(KERN_INFO MODULE_NAME ": Adult content setting processed: %s\n", enabled ? "on" : "off");
-    return true;
 }
 
 static bool handle_domain_operation(const char *buffer, bool is_add) {
@@ -93,22 +61,7 @@ static bool handle_domain_operation(const char *buffer, bool is_add) {
 }
 
 static bool handle_initial_settings(const char *buffer) {
-    const char *settings_start;
-    size_t settings_len;
-    
-    int ret = get_json_value(buffer, STR_SETTINGS, &settings_start, &settings_len);
-    if (ret < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Failed to get settings object: %d\n", ret);
-        return false;
-    }
-
-    // Parse the settings values (ad_block and adult_block)
-    ret = parse_settings_values(settings_start, settings_len);
-    if (ret < 0) {
-        printk(KERN_WARNING MODULE_NAME ": Failed to parse settings values: %d\n", ret);
-        return false;
-    }
-
+    int ret = 0;
     ret = parse_domains(buffer);
     if (ret < 0) {
         printk(KERN_WARNING MODULE_NAME ": Failed to parse domains: %d\n", ret);
@@ -131,14 +84,6 @@ static int process_server_message(const char *buffer) {
     printk(KERN_DEBUG MODULE_NAME ": Operation code: %d\n", op);
     
     switch (op) {
-        case CODE_AD_BLOCK_INT:
-            printk(KERN_DEBUG MODULE_NAME ": Handling ad block settings\n");
-            return handle_ad_block_settings(buffer) ? 0 : -EINVAL;
-            
-        case CODE_ADULT_BLOCK_INT:
-            printk(KERN_DEBUG MODULE_NAME ": Handling adult content settings\n");
-            return handle_adult_content_settings(buffer) ? 0 : -EINVAL;
-            
         case CODE_ADD_DOMAIN_INT:
             printk(KERN_DEBUG MODULE_NAME ": Handling add domain\n");
             return handle_domain_operation(buffer, true) ? 0 : -EINVAL;
