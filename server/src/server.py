@@ -46,7 +46,6 @@ class Server:
         try:
             initial_settings = self._get_initial_settings()
             await self.notify_kernel(initial_settings)
-
             while self.running:
                 await asyncio.sleep(1)
 

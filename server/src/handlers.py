@@ -143,6 +143,8 @@ class SettingsHandler(RequestHandler):
                 STR_AD_BLOCK: self.db_manager.get_setting(STR_AD_BLOCK),
                 STR_ADULT_BLOCK: self.db_manager.get_setting(STR_ADULT_BLOCK)
             }
+
+            self.dns_manager.update_dns_settings(settings[STR_AD_BLOCK], settings[STR_ADULT_BLOCK])
             
             self.logger.info(f"Settings requested, returned {len(domains)} domains")
             return {
