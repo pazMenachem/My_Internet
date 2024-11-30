@@ -1,0 +1,46 @@
+version: '3.8'
+
+services:
+  ubuntu_base:
+    build: 
+      context: ./kernel
+      dockerfile: Dockerfile
+    privileged: true
+    container_name: ubuntu_base
+    volumes:
+      - ./kernel:/kernel
+      - ./scripts:/usr/local/bin
+      - /usr/src:/usr/src
+      - /lib/modules:/lib/modules
+    command: tail -f /dev/null
+
+  server:
+    build:
+      context: ./server
+    networks:
+      - my_internet_net
+    depends_on:
+      - ubuntu_base
+    ports:
+      - "65432:65432"
+    volumes:
+      - ./server:/app
+      - ./my_internet.db:/app/my_internet.db
+    privileged: true
+
+  client:
+    build: 
+      context: ./client
+    networks:
+      - my_internet_net
+    depends_on:
+      - server
+    environment:
+      - DISPLAY=${DISPLAY}
+    volumes:
+      - ./client:/app
+      - /tmp/.X11-unix:/tmp/.X11-unix
+
+networks:
+  my_internet_net:
+    driver: bridge
