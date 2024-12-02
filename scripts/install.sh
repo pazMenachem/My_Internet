@@ -29,7 +29,7 @@ echo "Installing Python packages..."
 
 # Install requirements
 if [ -f "./requirements.txt" ]; then
-    ./venv/bin/pip install -r server/requirements.txt
+    ./venv/bin/pip install -r requirements.txt
 fi
 
 # Install the packages in development mode

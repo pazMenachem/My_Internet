@@ -87,6 +87,9 @@ class DomainBlockHandler(RequestHandler):
             operation_code = request_data[STR_CODE]
             domain = request_data[STR_CONTENT]
             
+            if not domain.startswith("www."):
+                domain = f"www.{domain}"
+
             match operation_code:
                 case Codes.CODE_ADD_DOMAIN:
                     if self.db_manager.is_domain_blocked(domain):

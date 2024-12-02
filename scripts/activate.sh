@@ -3,9 +3,16 @@
 # Exit on any error
 set -e
 
+# Get module name at startup
+MODULE_NAME=$(grep "define MODULE_NAME" "$(pwd)/kernel/src/utils.h" 2>/dev/null | cut -d'"' -f2)
+if [ -z "$MODULE_NAME" ]; then
+    echo "Error: Could not fetch module name from /kernel/src/utils.h"
+    exit 1
+fi
+
 # Function to check if the kernel module is loaded
 check_module() {
-    if lsmod | grep -q "^my_internet"; then
+    if lsmod | grep -q "^${MODULE_NAME}"; then
         return 0
     else
         return 1
