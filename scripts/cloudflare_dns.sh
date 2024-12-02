@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Enable routing for localhost
+sudo sysctl -w net.ipv4.conf.all.route_localnet=1
+
 # Flush existing NAT table rules to start fresh
 sudo iptables -t nat -F
 
