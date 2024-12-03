@@ -21,8 +21,8 @@ class Server:
         Args:
             db_manager: Database manager instance for handling data operations
         """
-        self.request_factory = RequestFactory(self.db_manager)
         self.db_manager = db_manager
+        self.request_factory = RequestFactory(self.db_manager)
         self.kernel_writer: Optional[asyncio.StreamWriter] = None
         self.running = True
         self.logger = setup_logger(__name__)
