@@ -3,7 +3,7 @@
 # Exit on any error
 set -e
 
-# Function to check if the kernel module is loaded
+# Check if the kernel module is loaded
 check_module() {
     if lsmod | grep -q "^my_internet"; then
         return 0
@@ -12,7 +12,7 @@ check_module() {
     fi
 }
 
-# Function to start the server
+# Start the server
 start_server() {
     echo "Starting server..."
     source venv/bin/activate
@@ -22,7 +22,7 @@ start_server() {
     deactivate
 }
 
-# Function to start the client
+# Start the client
 start_client() {
     echo "Starting client..."
     source venv/bin/activate
@@ -51,7 +51,7 @@ if ! check_module; then
 fi
 sleep 1  # Wait for kernel module to initialize
 
-# Finally start the client
+# Start the client
 start_client
 
 echo "System activated successfully!"

@@ -5,13 +5,13 @@ set -e
 
 echo "Starting installation process..."
 
-# Function to check if command exists
+# Check if command exists
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
 # Check for required commands
-for cmd in python3 pip3 make gcc; do
+for cmd in python3 pip make gcc; do
     if ! command_exists "$cmd"; then
         echo "Error: $cmd is required but not installed."
         exit 1
