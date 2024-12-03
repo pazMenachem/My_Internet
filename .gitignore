@@ -848,3 +848,5 @@ FodyWeavers.xsd
 ## Misc
 my_internet.db
 server/my_internet.db
+.client.pid
+.server.pid

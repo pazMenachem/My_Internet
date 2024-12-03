@@ -27,27 +27,19 @@ fi
 # Install Python packages
 echo "Installing Python packages..."
 
-# Install server requirements
-if [ -f "server/requirements.txt" ]; then
-    ./venv/bin/pip install -r server/requirements.txt
-fi
-
-# Install client requirements
-if [ -f "client/requirements.txt" ]; then
-    ./venv/bin/pip install -r client/requirements.txt
+# Install requirements
+if [ -f "./requirements.txt" ]; then
+    ./venv/bin/pip install -r requirements.txt
 fi
 
 # Install the packages in development mode
 echo "Installing packages in development mode..."
-./venv/bin/pip install -e server/
-./venv/bin/pip install -e client/
+./venv/bin/pip install -e .
 
 # Build and install kernel module
 echo "Building kernel module..."
 cd kernel
 make clean
 make
-echo "Installing kernel module..."
-sudo make install
 
 echo "Installation completed successfully!"
