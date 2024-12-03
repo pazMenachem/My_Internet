@@ -832,6 +832,7 @@ FodyWeavers.xsd
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
+.vscode
 
 # Local History for Visual Studio Code
 .history/
@@ -844,4 +845,8 @@ FodyWeavers.xsd
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio
 
-# End of https://www.toptal.com/developers/gitignore/api/python,c,windows,linux,visualstudio,pycharm,clion
+## Misc
+my_internet.db
+server/my_internet.db
+.client.pid
+.server.pid
