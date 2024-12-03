@@ -3,6 +3,7 @@ from unittest import mock
 from typing import Generator
 from My_Internet.server.src.server import Server
 from My_Internet.server.src.db_manager import DatabaseManager
+import asyncio
 
 @pytest.fixture
 def mock_db_manager() -> mock.Mock:
@@ -17,7 +18,7 @@ def mock_db_manager() -> mock.Mock:
 def server_instance(mock_db_manager: mock.Mock) -> Server:
     """Create a server instance for testing."""
     server = Server(mock_db_manager)
-    server.logger = mock.Mock()  # Mock the logger to prevent actual logging
+    server.logger = mock.Mock()  
     return server
 
 @pytest.fixture
@@ -35,7 +36,7 @@ def mock_socket() -> mock.Mock:
 def mock_stream_reader() -> mock.AsyncMock:
     """Create a mock stream reader."""
     reader = mock.AsyncMock()
-    reader.readline = mock.AsyncMock()
+    reader.read = mock.AsyncMock()
     return reader
 
 @pytest.fixture
@@ -49,7 +50,20 @@ def mock_stream_writer() -> mock.Mock:
     writer.get_extra_info = mock.Mock(return_value=('127.0.0.1', 12345))
     return writer
 
-@pytest.fixture
-def mock_asyncio_start_server() -> mock.AsyncMock:
-    """Create a mock for asyncio.start_server."""
-    return mock.AsyncMock()
+@pytest.fixture(autouse=True)
+async def setup_test_env():
+    """Setup test environment for all tests."""
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    yield
+    pending = asyncio.all_tasks(loop)
+    for task in pending:
+        task.cancel()
+    loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+    loop.close()
+
+def pytest_configure(config):
+    """Configure pytest with custom markers."""
+    config.addinivalue_line(
+        "markers", "timeout: mark test to timeout after X seconds"
+    )
