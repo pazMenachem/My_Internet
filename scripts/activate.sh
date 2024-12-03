@@ -98,7 +98,7 @@ if ! check_module; then
 fi
 sleep 1  # Wait for kernel module to initialize
 
-# Finally start the client
+# Start the client
 start_client
 
 echo "System activated successfully!"

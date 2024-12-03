@@ -98,6 +98,7 @@ class DatabaseManager:
             return domains
 
     def is_domain_blocked(self, domain: str) -> bool:
+
         """Check if domain is in blocked list."""
         with sqlite3.connect(self.db_file) as conn:
             cursor = conn.cursor()

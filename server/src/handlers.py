@@ -2,11 +2,9 @@ from typing import Dict, Any
 from .db_manager import DatabaseManager
 from .utils import (
     Codes,
-    STR_AD_BLOCK, STR_ADULT_BLOCK,
-    STR_CODE, STR_CONTENT, STR_DOMAINS,
-    STR_DOMAIN_BLOCKED_MSG, STR_DOMAIN_NOT_FOUND_MSG,
-    STR_DOMAIN_UNBLOCKED_MSG, STR_OPERATION,
-    STR_SETTINGS,invalid_json_response
+    STR_AD_BLOCK, STR_ADULT_BLOCK, STR_CODE, STR_CONTENT,
+    STR_DOMAINS, STR_OPERATION, STR_SETTINGS,
+    invalid_json_response
 )
 from .logger import setup_logger
 from .dns_manager import DNSManager
@@ -14,9 +12,9 @@ from .dns_manager import DNSManager
 class RequestHandler:
     """Base class for request handlers."""
     def __init__(self, db_manager: DatabaseManager):
-        self.db_manager = db_manager
+        self.db_manager  = db_manager
         self.dns_manager = DNSManager()
-        self.logger = setup_logger(self.__class__.__name__)
+        self.logger      = setup_logger(self.__class__.__name__)
 
 class AdBlockHandler(RequestHandler):
     def handle_request(self, request_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -32,8 +30,8 @@ class AdBlockHandler(RequestHandler):
                 
                 self.logger.info(f"Ad blocking turned {state}")
                 return {
-                    STR_CODE: Codes.CODE_SUCCESS,
-                    STR_CONTENT: f"{state}",
+                    STR_CODE:      Codes.CODE_SUCCESS,
+                    STR_CONTENT:   f"{state}",
                     STR_OPERATION: Codes.CODE_AD_BLOCK
                 }
                 
@@ -42,8 +40,8 @@ class AdBlockHandler(RequestHandler):
         except Exception as e:
             self.logger.error(f"Error in ad block handler: {e}")
             return {
-                STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e),
+                STR_CODE:      Codes.CODE_ERROR,
+                STR_CONTENT:   str(e),
                 STR_OPERATION: Codes.CODE_AD_BLOCK
             }
 
@@ -61,8 +59,8 @@ class AdultContentBlockHandler(RequestHandler):
                 
                 self.logger.info(f"Adult content blocking turned {state}")
                 return {
-                    STR_CODE: Codes.CODE_SUCCESS,
-                    STR_CONTENT: f"{state}",
+                    STR_CODE:      Codes.CODE_SUCCESS,
+                    STR_CONTENT:   f"{state}",
                     STR_OPERATION: Codes.CODE_ADULT_BLOCK
                 }
                 
@@ -71,8 +69,8 @@ class AdultContentBlockHandler(RequestHandler):
         except Exception as e:
             self.logger.error(f"Error in adult content block handler: {e}")
             return {
-                STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e),
+                STR_CODE:      Codes.CODE_ERROR,
+                STR_CONTENT:   str(e),
                 STR_OPERATION: Codes.CODE_ADULT_BLOCK
             }
 
@@ -95,16 +93,16 @@ class DomainBlockHandler(RequestHandler):
                     if self.db_manager.is_domain_blocked(domain):
                         self.logger.warning(f"Domain already blocked: {domain}")
                         return {
-                            STR_CODE: Codes.CODE_ERROR,
-                            STR_CONTENT: f"Domain {domain} is already blocked",
+                            STR_CODE:      Codes.CODE_ERROR,
+                            STR_CONTENT:   f"Domain {domain} is already blocked",
                             STR_OPERATION: Codes.CODE_ADD_DOMAIN
                         }
                     
                     self.db_manager.add_blocked_domain(domain)
                     self.logger.info(f"Domain blocked: {domain}")
                     return {
-                        STR_CODE: Codes.CODE_SUCCESS,
-                        STR_CONTENT: domain,
+                        STR_CODE:      Codes.CODE_SUCCESS,
+                        STR_CONTENT:   domain,
                         STR_OPERATION: Codes.CODE_ADD_DOMAIN
                     }
 
@@ -112,15 +110,15 @@ class DomainBlockHandler(RequestHandler):
                     if self.db_manager.remove_blocked_domain(domain):
                         self.logger.info(f"Domain unblocked: {domain}")
                         return {
-                            STR_CODE: Codes.CODE_SUCCESS,
-                            STR_CONTENT: domain,
+                            STR_CODE:      Codes.CODE_SUCCESS,
+                            STR_CONTENT:   domain,
                             STR_OPERATION: Codes.CODE_REMOVE_DOMAIN
                         }
 
                     self.logger.warning(f"Domain not found for unblocking: {domain}")
                     return {
-                        STR_CODE: Codes.CODE_ERROR,
-                        STR_CONTENT: domain,
+                        STR_CODE:      Codes.CODE_ERROR,
+                        STR_CONTENT:   domain,
                         STR_OPERATION: Codes.CODE_REMOVE_DOMAIN
                     }
                     
@@ -130,8 +128,8 @@ class DomainBlockHandler(RequestHandler):
         except Exception as e:
             self.logger.error(f"Error in domain block handler: {e}")
             return {
-                STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e),
+                STR_CODE:      Codes.CODE_ERROR,
+                STR_CONTENT:   str(e),
                 STR_OPERATION: operation_code
             }
 
@@ -143,7 +141,7 @@ class SettingsHandler(RequestHandler):
             # Get domains and settings
             domains = self.db_manager.get_blocked_domains()
             settings = {
-                STR_AD_BLOCK: self.db_manager.get_setting(STR_AD_BLOCK),
+                STR_AD_BLOCK:    self.db_manager.get_setting(STR_AD_BLOCK),
                 STR_ADULT_BLOCK: self.db_manager.get_setting(STR_ADULT_BLOCK)
             }
 
@@ -151,17 +149,17 @@ class SettingsHandler(RequestHandler):
             
             self.logger.info(f"Settings requested, returned {len(domains)} domains")
             return {
-                STR_CODE: Codes.CODE_SUCCESS,
-                STR_DOMAINS: domains,
-                STR_SETTINGS: settings,
+                STR_CODE:      Codes.CODE_SUCCESS,
+                STR_DOMAINS:   domains,
+                STR_SETTINGS:  settings,
                 STR_OPERATION: Codes.CODE_INIT_SETTINGS
             }
 
         except Exception as e:
             self.logger.error(f"Error in settings handler: {e}")
             return {
-                STR_CODE: Codes.CODE_ERROR,
-                STR_CONTENT: str(e),
+                STR_CODE:      Codes.CODE_ERROR,
+                STR_CONTENT:   str(e),
                 STR_OPERATION: Codes.CODE_INIT_SETTINGS
             }
 
@@ -171,9 +169,9 @@ class RequestFactory:
         self.db_manager = db_manager
         self.logger = setup_logger(__name__)
         self.handlers = {
-            Codes.CODE_AD_BLOCK: AdBlockHandler(db_manager),
-            Codes.CODE_ADULT_BLOCK: AdultContentBlockHandler(db_manager),
-            Codes.CODE_ADD_DOMAIN: DomainBlockHandler(db_manager),
+            Codes.CODE_AD_BLOCK:      AdBlockHandler(db_manager),
+            Codes.CODE_ADULT_BLOCK:   AdultContentBlockHandler(db_manager),
+            Codes.CODE_ADD_DOMAIN:    DomainBlockHandler(db_manager),
             Codes.CODE_REMOVE_DOMAIN: DomainBlockHandler(db_manager),
             Codes.CODE_INIT_SETTINGS: SettingsHandler(db_manager)
         }

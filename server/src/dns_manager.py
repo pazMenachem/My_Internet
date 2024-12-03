@@ -3,7 +3,13 @@ import os
 from typing import Optional
 from pathlib import Path
 from .logger import setup_logger
-from .utils import STR_TOGGLE_ON, STR_AD_BLOCK, STR_ADULT_BLOCK
+from .utils import (
+    STR_TOGGLE_ON,
+    STR_CLOUDFLARE_DNS_SCRIPT,
+    STR_ADGUARD_DNS_SCRIPT,
+    STR_ADGUARD_FAMILY_DNS_SCRIPT,
+    STR_RESET_DNS_SCRIPT
+)
 
 class DNSManager:
     """Manages DNS redirection based on ad and adult content blocking settings."""
@@ -18,10 +24,10 @@ class DNSManager:
     def _verify_scripts(self) -> None:
         """Verify all required scripts exist and are executable."""
         required_scripts = [
-            "cloudflare_dns.sh",
-            "adguard_dns.sh",
-            "adguard_family_dns.sh",
-            "reset_dns.sh"
+            STR_CLOUDFLARE_DNS_SCRIPT,
+            STR_ADGUARD_DNS_SCRIPT,
+            STR_ADGUARD_FAMILY_DNS_SCRIPT,
+            STR_RESET_DNS_SCRIPT
         ]
         
         for script in required_scripts:
@@ -60,22 +66,22 @@ class DNSManager:
             # Both on - use AdGuard Family
             if ad_block == STR_TOGGLE_ON and adult_block == STR_TOGGLE_ON:
                 self.logger.info("Enabling AdGuard Family DNS (ads + adult content)")
-                self._run_script("adguard_family_dns.sh")
+                self._run_script(STR_ADGUARD_FAMILY_DNS_SCRIPT)
             
             # Only ad blocking - use AdGuard
             elif ad_block == STR_TOGGLE_ON:
                 self.logger.info("Enabling AdGuard DNS (ads only)")
-                self._run_script("adguard_dns.sh")
+                self._run_script(STR_ADGUARD_DNS_SCRIPT)
             
             # Only adult content blocking - use Cloudflare
             elif adult_block == STR_TOGGLE_ON:
                 self.logger.info("Enabling Cloudflare DNS (adult content only)")
-                self._run_script("cloudflare_dns.sh")
+                self._run_script(STR_CLOUDFLARE_DNS_SCRIPT)
             
             # Both off - reset DNS
             else:
                 self.logger.info("Resetting DNS settings")
-                self._run_script("reset_dns.sh")
+                self._run_script(STR_RESET_DNS_SCRIPT)
                 
         except Exception as e:
             self.logger.error(f"Failed to update DNS settings: {e}")
