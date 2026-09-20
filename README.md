@@ -13,19 +13,21 @@ flowchart LR
     GUI["Tkinter client<br/>add / remove domains<br/>toggle categories"]
     SRV["Python server<br/>asyncio + threads<br/>RequestFactory"]
     DB[("SQLite<br/>settings<br/>blocked_domains")]
-    KM["Kernel module (C)<br/>Network_Filter.ko"]
     NET(["Inbound DNS responses"])
+    DNSCFG["System resolver<br/>AdGuard / Cloudflare"]
 
     GUI <-->|"TCP :65432<br/>JSON"| SRV
     SRV <--> DB
-    SRV -->|"TCP :65433<br/>JSON op codes"| KM
-    SRV -.->|"shell scripts"| DNSCFG["System resolver<br/>AdGuard / Cloudflare"]
+    SRV -->|"TCP :65433<br/>JSON op codes"| CACHE
+    SRV -.->|"shell scripts"| DNSCFG
 
     NET --> HOOK
-    subgraph KM
+
+    subgraph KMOD["Kernel module (C) — Network_Filter.ko"]
         direction TB
         HOOK["PRE_ROUTING hook"] --> PARSE["Parse DNS name<br/>from wire format"]
-        PARSE --> LOOK{"In blocklist?<br/>RCU hash table"}
+        PARSE --> LOOK{"Blocked?"}
+        CACHE[("Blocklist<br/>RCU hash table")] -.->|"lock-free read"| LOOK
         LOOK -->|no| PASS["NF_ACCEPT unchanged"]
         LOOK -->|yes| REWRITE["Rewrite in place → NXDOMAIN<br/>recompute UDP checksum"]
         REWRITE --> PASS2["NF_ACCEPT modified"]
